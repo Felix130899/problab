@@ -61,6 +61,10 @@
   <exec_depend>roscpp</exec_depend>
   <exec_depend>rospy</exec_depend>
   <exec_depend>std_msgs</exec_depend>
+  <depend>actionlib</depend>
+  <depend>move_base_msgs</depend>
+  <depend>tf</depend>
+
 
 
   <!-- The export tag contains other, unspecified, tags -->
