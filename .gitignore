@@ -1,0 +1,62 @@
+# === CATKIN BUILD ARTIFACTS ===
+ros_ws_prolab/build/
+ros_ws_prolab/devel/
+ros_ws_prolab/install/
+ros_ws_prolab/log/
+ros_ws_prolab/test_results/
+
+# === CMAKE / MAKE ARTIFACTS ===
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/Makefile
+**/CTestTestfile.cmake
+**/CTestCustom.cmake
+**/CTestConfiguration.ini
+**/progress.make
+**/progress.marks
+**/*.cmake
+**/*.cache
+
+# === EDITOR / IDE / PYTHON JUNK ===
+**/.vscode/
+**/.idea/
+**/*.pyc
+**/*.pyo
+**/__pycache__/
+**/*.swp
+**/*.swo
+**/*.bak
+**/*.orig
+**/*.rej
+**/*~
+
+# === DOCKER INTERMEDIATE / BUILD FILES (safe to ignore) ===
+Docker/*.tar
+Docker/*-image
+Docker/*-container
+Docker/.dockerignore
+Docker/docker-compose.override.yml
+
+# === ROS BAG FILES / LOGGING ===
+*.bag
+*.bag.active
+*.log
+
+# === SYMLINKED / SYSTEM FILES ===
+*.DS_Store
+Thumbs.db
+
+# === OPTIONAL IGNORE ROS CACHE FILES ===
+**/catkin_generated/
+**/catkin_make.cache
+
+# === OPTIONAL: IGNORE LAUNCH FILE BACKUPS ===
+**/*.launch~
+
+# === MANUAL SCRIPTS (TRACKED!) ===
+!start_ros_container.sh
+
+# === DO NOT IGNORE SOURCE FILES ===
+!ros_ws_prolab/src/
+!ros_ws_prolab/src/**/*

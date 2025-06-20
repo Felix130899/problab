@@ -1,0 +1,25 @@
+<launch>
+
+  <!-- TurtleBot3 Modell -->
+  <arg name="model" default="burger"/>
+  <env name="TURTLEBOT3_MODEL" value="$(arg model)" />
+
+  <!-- Deine eigene Welt laden -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find problab)/worlds/playground.world"/>
+  </include>
+
+  <!-- URDF des TurtleBot3 laden (manuell) -->
+  <param name="robot_description"
+         command="$(find xacro)/xacro '$(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro'" />
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" />
+
+  <!-- TurtleBot3 in Gazebo spawnen -->
+  <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" output="screen"
+        args="-urdf -model turtlebot3 -param robot_description -x 0 -y 0 -z 0.1" />
+
+  <!-- RViz starten (optional mit Standard-Config) -->
+  <node pkg="rviz" type="rviz" name="rviz" output="screen"
+        args="-d $(find turtlebot3_navigation)/rviz/turtlebot3_nav.rviz" />
+
+</launch>
