@@ -1,0 +1,47 @@
+<launch>
+  <!-- ========= WORLD & ROBOT SETUP ========= -->
+  <arg name="world_name" default="$(find problab)/worlds/playground.world" />
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find problab)/worlds/playground.world"/>
+  </include>
+  
+  <arg name="robot_model" default="burger" />
+  <arg name="use_sim_time" default="true" />
+  <arg name="localization_launch" default="" />
+
+    <!-- TurtleBot3 Modell -->
+  <arg name="model" default="burger"/>
+  <env name="TURTLEBOT3_MODEL" value="$(arg model)" />
+
+
+  <!-- URDF des TurtleBot3 laden (manuell) -->
+  <param name="robot_description"
+         command="$(find xacro)/xacro '$(find turtlebot3_description)/urdf/turtlebot3_$(arg model).urdf.xacro'" />
+  <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher" />
+
+  <!-- TurtleBot3 in Gazebo spawnen -->
+  <node name="spawn_urdf" pkg="gazebo_ros" type="spawn_model" output="screen"
+        args="-urdf -model turtlebot3 -param robot_description -x 0 -y 0 -z 0.1" />
+
+  
+  <!-- Use Gazebo simulation time -->
+  <param name="use_sim_time" value="$(arg use_sim_time)" />
+
+  <!-- ========= NAVIGATION STACK ========= -->
+  <include file="$(find turtlebot3_navigation)/launch/move_base.launch" />
+
+  <!-- ========= RVIZ ========= -->
+  <node name="rviz" pkg="rviz" type="rviz" output="screen" args="-d $(find problab)/rviz/problab_config.rviz" />
+
+  <!-- ========= WAYPOINT CONFIG ========= -->
+  <!-- ========= WAYPOINT NODE ========= -->
+  <node name="waypoint_manager" pkg="problab" type="waypoint_node" output="screen">
+    <rosparam file="$(find problab)/config/waypoints.yaml" command="load"/>
+  </node>
+
+
+  <!-- ========= LOCALIZATION FILTER NODE ========= -->
+  <group if="$(eval localization_launch != '')">
+    <include file="$(find problab)/launch/$(arg localization_launch)" />
+  </group>
+</launch>
