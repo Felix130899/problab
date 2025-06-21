@@ -124,12 +124,14 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
+find_package(Eigen3 REQUIRED)
+set(EIGEN3_INCLUDE_DIRS "/usr/include/eigen3")
 include_directories(
- include
+  include
   ${catkin_INCLUDE_DIRS}
-  ${catkin_INCLUDE_DIRS}
-  ${Eigen3_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIRS}
 )
+
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -225,3 +227,12 @@ add_dependencies(waypoint_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPO
 add_executable(filter_node src/filter_node.cpp)
 add_dependencies(filter_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(filter_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+
+#--- KF Node --#
+add_executable(kf_node
+  src/kf_node.cpp
+  src/convert_sensor_data.cpp
+  src/kalman_filter.cpp
+)
+add_dependencies(kf_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(kf_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})

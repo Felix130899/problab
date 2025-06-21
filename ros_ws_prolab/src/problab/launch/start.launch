@@ -13,5 +13,10 @@
 
   <node type="rviz" name="rviz" pkg="rviz" args="-d $(find problab)/config/config.rviz" />
 
-  <node pkg="turtlebot3_teleop" type="turtlebot3_teleop_key" name="turtlebot3_teleop_key" launch-prefix="xterm -e"/>
+<!--
+<node pkg="turtlebot3_teleop" type="turtlebot3_teleop_key" name="turtlebot3_teleop_key" launch-prefix="xterm -e"/>
+-->
+
+
+<node pkg="turtlebot3_teleop" type="turtlebot3_teleop_key" name="teleop" output="screen" />
 </launch>

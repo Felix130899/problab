@@ -39,6 +39,9 @@
     <rosparam file="$(find problab)/config/waypoints.yaml" command="load"/>
   </node>
 
+  <!-- ========= KF NODE ========= -->
+  <node name="kf_manager" pkg="problab" type="kf_node" output="screen" />
+
 
   <!-- ========= LOCALIZATION FILTER NODE ========= -->
   <group if="$(eval localization_launch != '')">
