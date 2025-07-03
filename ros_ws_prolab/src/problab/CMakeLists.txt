@@ -124,12 +124,14 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
+find_package(Eigen3 REQUIRED)
+set(EIGEN3_INCLUDE_DIRS "/usr/include/eigen3")
 include_directories(
- include
+  include
   ${catkin_INCLUDE_DIRS}
-  ${catkin_INCLUDE_DIRS}
-  ${Eigen3_INCLUDE_DIRS}
+  ${EIGEN3_INCLUDE_DIRS}
 )
+
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -218,10 +220,30 @@ include_directories(
 
 #--- Waypoints Node ---#
 add_executable(waypoint_node src/waypoint_node.cpp)
-target_link_libraries(waypoint_node ${catkin_LIBRARIES})
+target_link_libraries(waypoint_node
+  ${catkin_LIBRARIES}
+  # Für YAML-Parsing via XmlRpcValue ist yaml-cpp meist nicht nötig,
+  # aber wenn Sie es wirklich einbinden, müsste es hier auch rein:
+  # yaml-cpp
+)
 add_dependencies(waypoint_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 #--- Filter Node ---#
 add_executable(filter_node src/filter_node.cpp)
 add_dependencies(filter_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(filter_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+
+#--- KF Node --#
+add_executable(kf_node
+  src/kf_node.cpp
+  src/convert_sensor_data.cpp
+  src/kalman_filter.cpp
+)
+add_dependencies(kf_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(kf_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+
+# Add this for debug symbols (often default in debug builds, but good to be explicit)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
+
+# If you want to optimize for speed later, you'd change -g to -O2 or -O3
+# For debugging, -g is essential.
