@@ -5,7 +5,7 @@ KalmanFilter::KalmanFilter()
 {
     mu_ = Eigen::VectorXd::Zero(5);
     Sigma_ = Eigen::MatrixXd::Identity(5, 5) * 0.1;
-    R_ = Eigen::MatrixXd::Identity(5, 5) * 0.01; // Initialisiere R
+    R_ = Eigen::MatrixXd::Identity(5, 5) * 0.001; // Initialisiere R
 }
 
 void KalmanFilter::predict(const SensorData &data, double dt)
@@ -36,13 +36,14 @@ void KalmanFilter::predict(const SensorData &data, double dt)
 void KalmanFilter::correct(const Eigen::VectorXd &z)
 {
     // Beobachtungsmatrix H
-    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(3, 5);
-    H(0, 0) = 1.0; // x
-    H(1, 1) = 1.0; // y
-    H(2, 2) = 1.0; // theta
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 5);
+    H(0, 3) = 1.0; // v (linear velocity)
+    H(1, 4) = 1.0; // ω (angular velocity)
+
+
 
     // Hier wird Q als feste Matrix verwendet, nicht dynamisch von der Odometrie
-    Eigen::MatrixXd Q = Eigen::MatrixXd::Identity(3, 3) * 0.05; // Beispiel für einen festen Q-Wert
+    Eigen::MatrixXd Q = Eigen::MatrixXd::Identity(2, 2) * 0.005; // Beispiel für einen festen Q-Wert
 
     // Innovation
     Eigen::VectorXd y = z - H * mu_;
