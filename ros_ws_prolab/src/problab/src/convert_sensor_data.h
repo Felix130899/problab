@@ -1,13 +1,20 @@
-#pragma once
-#include <nav_msgs/Odometry.h>
+// convert_sensor_data.h
+#ifndef CONVERT_SENSOR_DATA_H
+#define CONVERT_SENSOR_DATA_H
+
+#include <ros/ros.h>
 #include <sensor_msgs/Imu.h>
-#include <Eigen/Dense>
+#include <nav_msgs/Odometry.h>
+#include <eigen3/Eigen/Dense> // Ensure Eigen is included
 
 struct SensorData {
-    Eigen::Vector2d control;     // v, omega
-    Eigen::Quaterniond orientation;
     ros::Time timestamp;
+    Eigen::Vector2d control; // <--- Changed to fixed size 2D vector
+    Eigen::Quaterniond orientation;
+    // ... other members if any
 };
 
 SensorData convert_sensor_data(const nav_msgs::Odometry::ConstPtr &odom_msg,
                                 const sensor_msgs::Imu::ConstPtr &imu_msg);
+
+#endif

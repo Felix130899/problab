@@ -220,7 +220,12 @@ include_directories(
 
 #--- Waypoints Node ---#
 add_executable(waypoint_node src/waypoint_node.cpp)
-target_link_libraries(waypoint_node ${catkin_LIBRARIES})
+target_link_libraries(waypoint_node
+  ${catkin_LIBRARIES}
+  # Für YAML-Parsing via XmlRpcValue ist yaml-cpp meist nicht nötig,
+  # aber wenn Sie es wirklich einbinden, müsste es hier auch rein:
+  # yaml-cpp
+)
 add_dependencies(waypoint_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 #--- Filter Node ---#
@@ -236,3 +241,9 @@ add_executable(kf_node
 )
 add_dependencies(kf_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(kf_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+
+# Add this for debug symbols (often default in debug builds, but good to be explicit)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
+
+# If you want to optimize for speed later, you'd change -g to -O2 or -O3
+# For debugging, -g is essential.
