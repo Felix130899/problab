@@ -7,7 +7,7 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
 #include "convert_sensor_data.h" // This should define SensorData
-#include "kalman_filter.h"     // This should define KalmanFilter
+#include "ekf_filter.h"     // This should define KalmanFilter
 #include <tf2/utils.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <nav_msgs/Path.h>
@@ -15,6 +15,7 @@
 #include <fstream> // Für Dateiausgabe
 #include <iomanip> // Für Formatierung der Dateiausgabe
 #include <vector>  // Für std::vector
+
 
 // Structure to store data for each time step for logging purposes
 struct FilterStateData {
@@ -55,7 +56,7 @@ public:
 
 
 private:
-    KalmanFilter filter_; // KalmanFilter class is included from "kalman_filter.h"
+    ExtendedKalmanFilter filter_; // ExtendedKalmanFilter class is included from "kalman_filter.h"
     ros::Time last_time_;
     message_filters::Subscriber<nav_msgs::Odometry> odom_sub_;
     message_filters::Subscriber<sensor_msgs::Imu> imu_sub_;
@@ -114,6 +115,8 @@ private:
     {
         SensorData data = convert_sensor_data(odom_msg, imu_msg);
         ros::Time current_time = data.timestamp;
+        
+        ROS_INFO_STREAM("Sensor callback triggered at time: " << current_time.toSec() << "s");
 
         double dt = (last_time_.isZero()) ? 0.05 : (current_time - last_time_).toSec();
         last_time_ = current_time;
@@ -126,7 +129,7 @@ private:
 
 
         // *** HIER WAR DIE KORREKTUR VORHER NUR MIT 'z' ***
-        filter_.correct(z);
+        filter_.correct(data);;
 
         // Get the filtered state and covariance after correction
         const Eigen::VectorXd& filtered_mu = filter_.getMu();
@@ -165,6 +168,8 @@ private:
         groundtruth_path_.poses.push_back(gt_pose);
         groundtruth_path_.header.stamp = current_time;
         groundtruth_path_pub_.publish(groundtruth_path_);
+
+        ROS_INFO_STREAM("Finished sensor callback loop.");
     }
 
 
