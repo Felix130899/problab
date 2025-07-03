@@ -120,10 +120,10 @@ private:
         
         filter_.predict(data, dt);
 
-        Eigen::VectorXd z(3);
-        z << odom_msg->pose.pose.position.x,
-             odom_msg->pose.pose.position.y,
-             tf2::getYaw(odom_msg->pose.pose.orientation);
+        Eigen::VectorXd z(2);
+        z << odom_msg->twist.twist.linear.x,
+            imu_msg->angular_velocity.z;
+
 
         // *** HIER WAR DIE KORREKTUR VORHER NUR MIT 'z' ***
         filter_.correct(z);
