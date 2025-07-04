@@ -245,5 +245,14 @@ target_link_libraries(kf_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 # Add this for debug symbols (often default in debug builds, but good to be explicit)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 
-# If you want to optimize for speed later, you'd change -g to -O2 or -O3
-# For debugging, -g is essential.
+
+add_executable(ekf_node
+  src/ekf_node.cpp
+  src/convert_sensor_data.cpp
+  src/ekf_filter.cpp
+)
+add_dependencies(ekf_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(ekf_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+
+
+

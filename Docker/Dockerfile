@@ -49,7 +49,8 @@ RUN sudo apt update && sudo apt install -y \
     ros-noetic-joint-state-publisher \
     ros-noetic-joint-state-publisher-gui \
     ros-noetic-robot-state-publisher \
-    python3-numpy && \
+    python3-numpy \
+    ros-noetic-dwa-local-planner && \
     sudo apt autoremove -y && sudo apt clean
 
 # Init rosdep - NUR UPDATE, INIT IST BEREITS DURCH DAS BASISIMAGE ERFOLGT

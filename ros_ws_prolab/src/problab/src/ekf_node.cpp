@@ -7,7 +7,7 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
 #include "convert_sensor_data.h" // This should define SensorData
-#include "kalman_filter.h"     // This should define KalmanFilter
+#include "ekf_filter.h"     // This should define KalmanFilter
 #include <tf2/utils.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <nav_msgs/Path.h>
@@ -15,6 +15,7 @@
 #include <fstream> // Für Dateiausgabe
 #include <iomanip> // Für Formatierung der Dateiausgabe
 #include <vector>  // Für std::vector
+#include <gazebo_msgs/ModelStates.h>
 
 // Structure to store data for each time step for logging purposes
 struct FilterStateData {
@@ -37,14 +38,24 @@ public:
 
         pub_ = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("/prediction", 10);
         path_pub_ = nh.advertise<nav_msgs::Path>("/filter_path", 10);
-        path_.header.frame_id = "odom";  // or "map", depending on your setup
+        path_.header.frame_id = "map";  // or "map", depending on your setup
 
         nh.param<std::string>("output_file", output_filename_, "filter_data.txt");
 
         groundtruth_path_pub_ = nh.advertise<nav_msgs::Path>("/odom_path", 10);
-        groundtruth_path_.header.frame_id = "odom";
+        groundtruth_path_.header.frame_id = "map";
 
         last_time_ = ros::Time::now(); // Initialize last_time_
+
+
+        // --- NEW: Subscriber for actual Gazebo Ground Truth ---
+        // Option 1: If Gazebo publishes a dedicated Odometry topic for ground truth
+        //groundtruth_sub_ = nh.subscribe("/ground_truth/state", 10, &FilterNode::groundTruthCallback, this);
+        // Option 2: If you need to parse /gazebo/model_states
+        model_states_sub_ = nh.subscribe("/gazebo/model_states", 10, &FilterNode::modelStatesCallback, this);
+        model_states_path_pub_ = nh.advertise<nav_msgs::Path>("/model_state_path", 10);
+        model_states_path_.header.frame_id = "map";
+
     }
 
     // Destructor to save data when the node shuts down
@@ -55,7 +66,7 @@ public:
 
 
 private:
-    KalmanFilter filter_; // KalmanFilter class is included from "kalman_filter.h"
+    ExtendedKalmanFilter filter_; // ExtendedKalmanFilter class is included from "kalman_filter.h"
     ros::Time last_time_;
     message_filters::Subscriber<nav_msgs::Odometry> odom_sub_;
     message_filters::Subscriber<sensor_msgs::Imu> imu_sub_;
@@ -69,15 +80,26 @@ private:
     std::vector<FilterStateData> filter_history_;
     std::string output_filename_;
 
-    ros::Publisher groundtruth_path_pub_;
-    nav_msgs::Path groundtruth_path_;
+    //ros::Publisher groundtruth_path_pub_;
+    //nav_msgs::Path groundtruth_path_;
+
+
+    // --- NEW: Ground truth subscribers and path ---
+    ros::Subscriber groundtruth_sub_; // For dedicated ground truth topic
+    ros::Subscriber model_states_sub_; // For /gazebo/model_states
+    nav_msgs::Path model_states_path_; // This will now store the *true* ground truth
+    ros::Publisher model_states_path_pub_;
+    nav_msgs::Path groundtruth_path_; // This will now store the *true* ground truth
+    ros::Publisher groundtruth_path_pub_; // Publisher for the true ground truth path
+
+
 
     // Method to publish the estimated pose with covariance
     void publish_prediction(const Eigen::VectorXd &mu, const Eigen::MatrixXd &Sigma, const ros::Time &stamp)
     {
         geometry_msgs::PoseWithCovarianceStamped msg;
         msg.header.stamp = stamp;
-        msg.header.frame_id = "odom";
+        msg.header.frame_id = "map";
 
         msg.pose.pose.position.x = mu(0);
         msg.pose.pose.position.y = mu(1);
@@ -114,6 +136,8 @@ private:
     {
         SensorData data = convert_sensor_data(odom_msg, imu_msg);
         ros::Time current_time = data.timestamp;
+        
+        //ROS_INFO_STREAM("Sensor callback triggered at time: " << current_time.toSec() << "s");
 
         double dt = (last_time_.isZero()) ? 0.05 : (current_time - last_time_).toSec();
         last_time_ = current_time;
@@ -126,7 +150,7 @@ private:
 
 
         // *** HIER WAR DIE KORREKTUR VORHER NUR MIT 'z' ***
-        filter_.correct(z);
+        filter_.correct(data); 
 
         // Get the filtered state and covariance after correction
         const Eigen::VectorXd& filtered_mu = filter_.getMu();
@@ -144,7 +168,7 @@ private:
 
         geometry_msgs::PoseStamped pose;
         pose.header.stamp = current_time;
-        pose.header.frame_id = "odom";
+        pose.header.frame_id = "map";
         pose.pose.position.x = filtered_mu(0);
         pose.pose.position.y = filtered_mu(1);
         pose.pose.position.z = 0.0;
@@ -158,15 +182,35 @@ private:
         path_pub_.publish(path_);
 
         // Publish "Ground Truth" path from odometry for comparison
-        geometry_msgs::PoseStamped gt_pose;
-        gt_pose.header.stamp = current_time;
-        gt_pose.header.frame_id = "odom";
-        gt_pose.pose = odom_msg->pose.pose;
-        groundtruth_path_.poses.push_back(gt_pose);
-        groundtruth_path_.header.stamp = current_time;
-        groundtruth_path_pub_.publish(groundtruth_path_);
+        // geometry_msgs::PoseStamped gt_pose;
+        // gt_pose.header.stamp = current_time;
+        // gt_pose.header.frame_id = "odom";
+        // gt_pose.pose = odom_msg->pose.pose;
+        // groundtruth_path_.poses.push_back(gt_pose);
+        // groundtruth_path_.header.stamp = current_time;
+        // groundtruth_path_pub_.publish(groundtruth_path_);
+
+        //ROS_INFO_STREAM("Finished sensor callback loop.");
     }
 
+    void modelStatesCallback(const gazebo_msgs::ModelStates::ConstPtr& msg)
+    {
+        auto it = std::find(msg->name.begin(), msg->name.end(), "turtlebot3");
+        if (it == msg->name.end()) {
+            ROS_WARN_THROTTLE(5.0, "Robot name not found in model_states");
+            return;
+        }
+
+        size_t index = std::distance(msg->name.begin(), it);
+        geometry_msgs::PoseStamped gt_pose;
+        gt_pose.header.stamp = ros::Time::now();
+        gt_pose.header.frame_id = "map";  // oder "odom", je nach RViz-Frame
+        gt_pose.pose = msg->pose[index];
+
+        model_states_path_.poses.push_back(gt_pose);
+        model_states_path_.header.stamp = gt_pose.header.stamp;
+        model_states_path_pub_.publish(model_states_path_);
+    }
 
 }; // End of FilterNode class
 
