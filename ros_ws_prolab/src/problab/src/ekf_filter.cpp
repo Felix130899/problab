@@ -4,12 +4,19 @@
 ExtendedKalmanFilter::ExtendedKalmanFilter()
 {
     mu_ = Eigen::VectorXd::Zero(5);
+    mu_p = Eigen::VectorXd::Zero(5);
     Sigma_ = Eigen::MatrixXd::Identity(5, 5) * 0.001;
     R_ = Eigen::MatrixXd::Identity(5, 5) * 0.001; // Initialisiere R
     // Im Konstruktor:
-    Q_ = Eigen::MatrixXd::Zero(2, 2);
-    Q_(0, 0) = 0.01;  // Winkelgeschwindigkeit (wz) – etwas unsicher
-    Q_(1, 1) = 0.1;   // Vorwärtsgeschwindigkeit (v) – typischerweise ungenauer
+    // Q_ = Eigen::MatrixXd::Zero(2, 2);
+    // Q_(0, 0) = 0.01;  // Winkelgeschwindigkeit (wz) – etwas unsicher
+    // Q_(1, 1) = 0.1;   // Vorwärtsgeschwindigkeit (v) – typischerweise ungenauer
+    
+    Q_ = Eigen::MatrixXd::Zero(3, 3);
+    Q_(0,0) = 0.005;  // IMU ω → hochfrequent, evtl. verrauschter
+    Q_(1,1) = 0.01;   // Odom ω → glatter, aber drifty
+    Q_(2,2) = 0.1;    // Odom v → ungenauer
+
 
 
 }
@@ -40,8 +47,9 @@ void ExtendedKalmanFilter::predict(const SensorData &data, double dt)
 
     // Berechne die prognostizierten Geschwindigkeiten basierend auf dem aktuellen Zustand und den Steuereingaben
     // Dies sind die Geschwindigkeiten, die die Bewegung während dieses dt tatsächlich verursachen werden
-    double v_predicted = v_current + delta_v;
-    double omega_predicted = omega_current + delta_omega;
+    double v_predicted = delta_v;
+    double omega_predicted = delta_omega;
+
 
 
     v_predicted = std::max(v_min, std::min(v_max, v_predicted));
@@ -50,21 +58,21 @@ void ExtendedKalmanFilter::predict(const SensorData &data, double dt)
     // --- 1. Nicht-lineare Prädiktion des Zustands (mu_ = g(mu_prev, u, dt)) ---
     // Dies ersetzt die lineare 'mu_ = A * mu_ + B * data.control;' Zeile.
     // Die Positionen (x, y) hängen nicht-linear von theta ab.
-    mu_(0) = x + v_predicted * cos(theta) * dt;
-    mu_(1) = y + v_predicted * sin(theta) * dt;
+    mu_p(0) = x + v_predicted * cos(theta) * dt;
+    mu_p(1) = y + v_predicted * sin(theta) * dt;
 
     // Die Orientierung (theta) aktualisiert sich linear
-    mu_(2) = theta + omega_predicted * dt;
+    mu_p(2) = theta + omega_predicted * dt;
 
     // Die Geschwindigkeiten aktualisieren sich basierend auf den Steuereingaben
-    mu_(3) = v_predicted;
-    mu_(4) = omega_predicted;
+    mu_p(3) = v_predicted;
+    mu_p(4) = omega_predicted;
 
     // Optional: Normalisiere den Orientierungswinkel theta auf [-pi, pi]
     // Dies verhindert, dass der Winkel überläuft und numerische Probleme verursacht.
-    mu_(2) = std::fmod(mu_(2) + M_PI, 2 * M_PI);
-    if (mu_(2) < 0) mu_(2) += 2 * M_PI;
-    mu_(2) -= M_PI;
+    mu_p(2) = std::fmod(mu_p(2) + M_PI, 2 * M_PI);
+    if (mu_p(2) < 0) mu_p(2) += 2 * M_PI;
+    mu_p(2) -= M_PI;
 
 
     // --- 2. Berechnung der Jakobischen Matrix des Zustandsübergangs (G) ---
@@ -108,26 +116,48 @@ void ExtendedKalmanFilter::correct(const SensorData &data)
 {
 
     // --- 1. Messwerte extrahieren ---
-    double measured_wz = data.imu_msg_ptr->angular_velocity.z;
-    double measured_v = data.linear_velocity;
+    // double measured_wz = data.imu_msg_ptr->angular_velocity.z;
+    // double measured_v = data.linear_velocity;
 
+    // double odom_wz = data.imu_msg_ptr->angular_velocity.z;
+    // double odom_v = data.linear_velocity;
     // --- 2. Messvektor z ---
-    Eigen::VectorXd z(2);
-    z(0) = measured_wz;
-    z(1) = measured_v;
+    // Eigen::VectorXd z(2);
+    // z(0) = measured_wz;
+    // z(1) = measured_v;
+
+    Eigen::VectorXd z(3);
+    z(0) = data.imu_angular_velocity_z;
+    z(1) = data.odom_angular_velocity_z;
+    z(2) = data.odom_linear_velocity;
 
     // --- 3. Erwartete Messung h(mu) ---
-    Eigen::VectorXd h_predicted(2);
-    h_predicted(0) = mu_(4); // erwartetes wz = omega
-    h_predicted(1) = mu_(3); // erwartetes v
+    //  Eigen::VectorXd h_predicted(2);
+    //  h_predicted(0) = mu_p(4); // erwartetes wz = omega
+    //  h_predicted(1) = mu_p(3); // erwartetes v
+
+    Eigen::VectorXd h_predicted(3);
+    h_predicted(0) = mu_p(4); // omega
+    h_predicted(1) = mu_p(4); // omega
+    h_predicted(2) = mu_p(3); // v
+
+
+
 
     // --- 4. Innovationsvektor ---
     Eigen::VectorXd y = z - h_predicted;
 
     // --- 5. Beobachtungsmatrix H ---
-    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 5);
-    H(0, 4) = 1.0; // dh0/d(omega)
-    H(1, 3) = 1.0; // dh1/d(v)
+    // Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 5);
+    // H(0, 4) = 1.0; // dh0/d(omega)
+    // H(1, 3) = 1.0; // dh1/d(v)
+
+    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(3, 5);
+    H(0,4) = 1.0; // imu_wz
+    H(1,4) = 1.0; // odom_wz
+    H(2,3) = 1.0; // odom_v
+
+
 
     // --- 6. Innovationskovarianz S ---
     Eigen::MatrixXd S = H * Sigma_ * H.transpose() + Q_; // Q_ muss 2x2 sein
@@ -136,7 +166,7 @@ void ExtendedKalmanFilter::correct(const SensorData &data)
     Eigen::MatrixXd K = Sigma_ * H.transpose() * S.inverse();
 
     // --- 8. Zustand aktualisieren ---
-    mu_ = mu_ + K * y;
+    mu_ = mu_p + K * y;
 
     // --- 9. Kovarianz aktualisieren ---
     Eigen::MatrixXd I = Eigen::MatrixXd::Identity(5, 5);
@@ -146,6 +176,32 @@ void ExtendedKalmanFilter::correct(const SensorData &data)
     mu_(2) = std::fmod(mu_(2) + M_PI, 2 * M_PI);
     if (mu_(2) < 0) mu_(2) += 2 * M_PI;
     mu_(2) -= M_PI;
+
+    std::cout << std::fixed << std::setprecision(6);
+    std::cout << "---------Kalmangain---------" << std::endl;
+    std::cout << K << std::endl;
+    std::cout << "############################" << std::endl;
+
+    std::cout << std::fixed << std::setprecision(6);
+    std::cout << "---------Z---------" << std::endl;
+    std::cout << z << std::endl;
+    std::cout << "############################" << std::endl;
+
+    std::cout << std::fixed << std::setprecision(6);
+    std::cout << "---------h()---------" << std::endl;
+    std::cout << h_predicted << std::endl;
+    std::cout << "############################" << std::endl;
+
+    std::cout << std::fixed << std::setprecision(6);
+    std::cout << "---------mu_ x---------" << std::endl;
+    std::cout << mu_(0) << std::endl;
+    std::cout << "############################" << std::endl;
+
+        std::cout << std::fixed << std::setprecision(6);
+    std::cout << "---------mu_ y---------" << std::endl;
+    std::cout << mu_(1) << std::endl;
+    std::cout << "############################" << std::endl;
+    
 }
 
 

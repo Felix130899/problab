@@ -21,6 +21,7 @@ public:
 
 private:
     Eigen::VectorXd mu_;     // Zustand: [x, y, theta, v, omega]
+    Eigen::VectorXd mu_p;
     Eigen::MatrixXd Sigma_;  // Kovarianzmatrix
     Eigen::MatrixXd R_;      // Prozessrauschen
     Eigen::MatrixXd Q_;

@@ -16,6 +16,13 @@ struct SensorData {
     double linear_velocity = 0.0;
     double angular_velocity_z = 0.0;
 
+    // double odom_pose_x;
+    // double odom_pose_y;
+
+    double imu_angular_velocity_z;   // aus IMU
+    double odom_angular_velocity_z;  // aus Odom
+    double odom_linear_velocity;     // aus Odom (x-Richtung)
+
 };
 
 SensorData convert_sensor_data(const nav_msgs::Odometry::ConstPtr &odom_msg,

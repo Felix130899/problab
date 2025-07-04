@@ -38,12 +38,12 @@ public:
 
         pub_ = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("/prediction", 10);
         path_pub_ = nh.advertise<nav_msgs::Path>("/filter_path", 10);
-        path_.header.frame_id = "odom";  // or "map", depending on your setup
+        path_.header.frame_id = "map";  // or "map", depending on your setup
 
         nh.param<std::string>("output_file", output_filename_, "filter_data.txt");
 
         groundtruth_path_pub_ = nh.advertise<nav_msgs::Path>("/odom_path", 10);
-        groundtruth_path_.header.frame_id = "odom";
+        groundtruth_path_.header.frame_id = "map";
 
         last_time_ = ros::Time::now(); // Initialize last_time_
 
@@ -99,7 +99,7 @@ private:
     {
         geometry_msgs::PoseWithCovarianceStamped msg;
         msg.header.stamp = stamp;
-        msg.header.frame_id = "odom";
+        msg.header.frame_id = "map";
 
         msg.pose.pose.position.x = mu(0);
         msg.pose.pose.position.y = mu(1);
@@ -168,7 +168,7 @@ private:
 
         geometry_msgs::PoseStamped pose;
         pose.header.stamp = current_time;
-        pose.header.frame_id = "odom";
+        pose.header.frame_id = "map";
         pose.pose.position.x = filtered_mu(0);
         pose.pose.position.y = filtered_mu(1);
         pose.pose.position.z = 0.0;
