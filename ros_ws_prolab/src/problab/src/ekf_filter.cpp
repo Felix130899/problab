@@ -5,12 +5,11 @@ ExtendedKalmanFilter::ExtendedKalmanFilter()
 {
     mu_ = Eigen::VectorXd::Zero(5);
     Sigma_ = Eigen::MatrixXd::Identity(5, 5) * 0.001;
-    R_ = Eigen::MatrixXd::Identity(5, 5) * 0.0001; // Initialisiere R
+    R_ = Eigen::MatrixXd::Identity(5, 5) * 0.001; // Initialisiere R
     // Im Konstruktor:
     Q_ = Eigen::MatrixXd::Zero(2, 2);
-    Q_(0, 0) = 0.005 * 0.005; // wz
-    Q_(1, 1) = 0.05  * 0.05;  // v
-    // Varianz für Gyro z
+    Q_(0, 0) = 0.01;  // Winkelgeschwindigkeit (wz) – etwas unsicher
+    Q_(1, 1) = 0.1;   // Vorwärtsgeschwindigkeit (v) – typischerweise ungenauer
 
 
 }
@@ -105,8 +104,9 @@ void ExtendedKalmanFilter::predict(const SensorData &data, double dt)
 
 
 // In Ihrer ExtendedKalmanFilter Klasse
-void ExtendedKalmanFilter::correct(const SensorData &data)
+void ExtendedKalmanFilter::correct(const SensorData &data) 
 {
+
     // --- 1. Messwerte extrahieren ---
     double measured_wz = data.imu_msg_ptr->angular_velocity.z;
     double measured_v = data.linear_velocity;

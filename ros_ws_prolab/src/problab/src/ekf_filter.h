@@ -14,7 +14,7 @@ class ExtendedKalmanFilter
 public:
     ExtendedKalmanFilter();
     void predict(const SensorData &data, double dt);
-    void correct(const SensorData &data); 
+    void correct(const SensorData &data);
 
     const Eigen::VectorXd& getMu() const;
     const Eigen::MatrixXd& getSigma() const;

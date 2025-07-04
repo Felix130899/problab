@@ -116,7 +116,7 @@ private:
         SensorData data = convert_sensor_data(odom_msg, imu_msg);
         ros::Time current_time = data.timestamp;
         
-        ROS_INFO_STREAM("Sensor callback triggered at time: " << current_time.toSec() << "s");
+        //ROS_INFO_STREAM("Sensor callback triggered at time: " << current_time.toSec() << "s");
 
         double dt = (last_time_.isZero()) ? 0.05 : (current_time - last_time_).toSec();
         last_time_ = current_time;
@@ -129,7 +129,7 @@ private:
 
 
         // *** HIER WAR DIE KORREKTUR VORHER NUR MIT 'z' ***
-        filter_.correct(data);;
+        filter_.correct(data); 
 
         // Get the filtered state and covariance after correction
         const Eigen::VectorXd& filtered_mu = filter_.getMu();
@@ -169,7 +169,7 @@ private:
         groundtruth_path_.header.stamp = current_time;
         groundtruth_path_pub_.publish(groundtruth_path_);
 
-        ROS_INFO_STREAM("Finished sensor callback loop.");
+        //ROS_INFO_STREAM("Finished sensor callback loop.");
     }
 
 
