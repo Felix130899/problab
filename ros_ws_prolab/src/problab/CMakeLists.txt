@@ -19,6 +19,8 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   nav_msgs
   cv_bridge
+  pcl_ros          
+  pcl_conversions
 )
 find_package(Eigen3 REQUIRED)
 
@@ -253,6 +255,14 @@ add_executable(ekf_node
 )
 add_dependencies(ekf_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(ekf_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+
+add_executable(pf_node
+  src/pf_node.cpp
+  src/convert_sensor_data.cpp
+  src/partical_filter.cpp
+)
+add_dependencies(pf_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(pf_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 
 
 
