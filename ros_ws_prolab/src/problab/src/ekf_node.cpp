@@ -15,7 +15,7 @@
 #include <fstream> // Für Dateiausgabe
 #include <iomanip> // Für Formatierung der Dateiausgabe
 #include <vector>  // Für std::vector
-
+#include <gazebo_msgs/ModelStates.h>
 
 // Structure to store data for each time step for logging purposes
 struct FilterStateData {
@@ -46,6 +46,16 @@ public:
         groundtruth_path_.header.frame_id = "odom";
 
         last_time_ = ros::Time::now(); // Initialize last_time_
+
+
+        // --- NEW: Subscriber for actual Gazebo Ground Truth ---
+        // Option 1: If Gazebo publishes a dedicated Odometry topic for ground truth
+        //groundtruth_sub_ = nh.subscribe("/ground_truth/state", 10, &FilterNode::groundTruthCallback, this);
+        // Option 2: If you need to parse /gazebo/model_states
+        model_states_sub_ = nh.subscribe("/gazebo/model_states", 10, &FilterNode::modelStatesCallback, this);
+        model_states_path_pub_ = nh.advertise<nav_msgs::Path>("/model_state_path", 10);
+        model_states_path_.header.frame_id = "map";
+
     }
 
     // Destructor to save data when the node shuts down
@@ -70,8 +80,19 @@ private:
     std::vector<FilterStateData> filter_history_;
     std::string output_filename_;
 
-    ros::Publisher groundtruth_path_pub_;
-    nav_msgs::Path groundtruth_path_;
+    //ros::Publisher groundtruth_path_pub_;
+    //nav_msgs::Path groundtruth_path_;
+
+
+    // --- NEW: Ground truth subscribers and path ---
+    ros::Subscriber groundtruth_sub_; // For dedicated ground truth topic
+    ros::Subscriber model_states_sub_; // For /gazebo/model_states
+    nav_msgs::Path model_states_path_; // This will now store the *true* ground truth
+    ros::Publisher model_states_path_pub_;
+    nav_msgs::Path groundtruth_path_; // This will now store the *true* ground truth
+    ros::Publisher groundtruth_path_pub_; // Publisher for the true ground truth path
+
+
 
     // Method to publish the estimated pose with covariance
     void publish_prediction(const Eigen::VectorXd &mu, const Eigen::MatrixXd &Sigma, const ros::Time &stamp)
@@ -161,17 +182,35 @@ private:
         path_pub_.publish(path_);
 
         // Publish "Ground Truth" path from odometry for comparison
-        geometry_msgs::PoseStamped gt_pose;
-        gt_pose.header.stamp = current_time;
-        gt_pose.header.frame_id = "odom";
-        gt_pose.pose = odom_msg->pose.pose;
-        groundtruth_path_.poses.push_back(gt_pose);
-        groundtruth_path_.header.stamp = current_time;
-        groundtruth_path_pub_.publish(groundtruth_path_);
+        // geometry_msgs::PoseStamped gt_pose;
+        // gt_pose.header.stamp = current_time;
+        // gt_pose.header.frame_id = "odom";
+        // gt_pose.pose = odom_msg->pose.pose;
+        // groundtruth_path_.poses.push_back(gt_pose);
+        // groundtruth_path_.header.stamp = current_time;
+        // groundtruth_path_pub_.publish(groundtruth_path_);
 
         //ROS_INFO_STREAM("Finished sensor callback loop.");
     }
 
+    void modelStatesCallback(const gazebo_msgs::ModelStates::ConstPtr& msg)
+    {
+        auto it = std::find(msg->name.begin(), msg->name.end(), "turtlebot3");
+        if (it == msg->name.end()) {
+            ROS_WARN_THROTTLE(5.0, "Robot name not found in model_states");
+            return;
+        }
+
+        size_t index = std::distance(msg->name.begin(), it);
+        geometry_msgs::PoseStamped gt_pose;
+        gt_pose.header.stamp = ros::Time::now();
+        gt_pose.header.frame_id = "map";  // oder "odom", je nach RViz-Frame
+        gt_pose.pose = msg->pose[index];
+
+        model_states_path_.poses.push_back(gt_pose);
+        model_states_path_.header.stamp = gt_pose.header.stamp;
+        model_states_path_pub_.publish(model_states_path_);
+    }
 
 }; // End of FilterNode class
 
