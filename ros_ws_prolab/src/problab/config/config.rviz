@@ -436,6 +436,14 @@ Visualization Manager:
       Topic: /model_state_path
       Unreliable: false
       Value: true
+    - Class: rviz/MarkerArray
+      Enabled: true
+      Marker Topic: /particles_marker_topic
+      Name: MarkerArray
+      Namespaces:
+        particles: true
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -464,7 +472,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 10.024537086486816
+      Distance: 8.926265716552734
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -472,9 +480,9 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 1.8308169841766357
-        Y: 3.784390449523926
-        Z: -6.263842582702637
+        X: -0.44427329301834106
+        Y: 0.7792884707450867
+        Z: -6.26177453994751
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
