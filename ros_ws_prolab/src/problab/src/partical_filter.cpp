@@ -13,7 +13,7 @@ ParticalFilter::ParticalFilter()
     : gen_(std::random_device()()), // Initialize random generator in constructor
       motion_noise_trans_(0.05),    // Initialize member variables
       motion_noise_rot_(0.02),
-      sensor_noise_(0.1),
+      sensor_noise_(1.0),
       noise_trans_(0.0, motion_noise_trans_), // Initialize distributions
       noise_rot_(0.0, motion_noise_rot_)
 {
@@ -97,32 +97,117 @@ void ParticalFilter::motionUpdate(double v, double omega, double dt)
 
 }
 
-void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan) {
-    int center_idx = scan.ranges.size() / 2;
-    float actual_distance = scan.ranges[center_idx];
+void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
+{
+    // Bestimme, wie viele Strahlen du nutzen möchtest
+    int num_beams_to_use = 10; // Beispiel: Nutze 10 Strahlen
 
-    for (auto& p : particales_) {
+    // Berechne den Schritt, um die Strahlen gleichmäßig zu verteilen
+    // Wenn num_beams_to_use = 1, wird nur der mittlere Strahl verwendet.
+    // Wenn num_beams_to_use > scan.ranges.size(), verwenden wir alle Strahlen.
+    int step_size = 1;
+    if (num_beams_to_use > 0 && scan.ranges.size() > num_beams_to_use) 
+    {
+        step_size = scan.ranges.size() / num_beams_to_use;
+    }
+    if (step_size == 0) step_size = 1; // Sicherstellen, dass step_size mindestens 1 ist
+
+    //#####################################################################
+    for (int i = 0; i < scan.ranges.size(); i += step_size) 
+    {
+        if (std::isinf(scan.ranges[i]) || std::isnan(scan.ranges[i])) 
+        {
+            continue;
+        }
+
+        float actual_distance = scan.ranges[i];
+        float angle = scan.angle_min + i * scan.angle_increment;
+
+        // ROS_INFO_STREAM("LaserScan: Beam " << i 
+        //                 << " | angle = " << angle 
+        //                 << " rad | distance = " << actual_distance << " m");
+            // Sicherstellen, dass der Scan gültige Daten enthält
+        if (scan.ranges.empty()) 
+        {
+            //ROS_WARN("Received empty laser scan, skipping weight update.");
+            return;
+        }
+    }
+    //#########################################################################
+
+    //ROS_INFO_STREAM("ParticalFilter::updateWeights(): Processing scan with " << scan.ranges.size() << " total ranges.");
+    //ROS_INFO_STREAM("  Using approximately " << (scan.ranges.size() / step_size) << " beams with step_size " << step_size << ".");
+
+
+    for (auto& p : particales_) 
+    {
         float weight = 1.0;
 
-        // später: Schleife über mehrere Winkel möglich
-        std::vector<float> relative_angles = {0.0f}; // z. B. später: {-0.3, 0.0, 0.3}
-        for (float angle_offset : relative_angles) {
-            float beam_theta = p.theta + angle_offset;
-            float expected = getExpectedDistanceFromMap(p.x, p.y, beam_theta);
+        // Iteriere über eine Auswahl von Strahlen aus dem tatsächlichen LaserScan
+        for (int i = 0; i < scan.ranges.size(); i += step_size) 
+        {
+            // Überspringe ungültige Messungen (NaN oder Inf)
+            if (std::isinf(scan.ranges[i]) || std::isnan(scan.ranges[i])) 
+            {
+                continue;
+            }
 
-            float error = expected - actual_distance;
+            float actual_distance = scan.ranges[i];
+
+            // Berechne den relativen Winkel für diesen spezifischen Laserstrahl
+            // scan.angle_min ist der Winkel des ersten Strahls
+            // scan.angle_increment ist der Winkelabstand zwischen den Strahlen
+            float angle_offset_for_this_beam = scan.angle_min + static_cast<float>(i) * scan.angle_increment;
+
+            // Berechne den absoluten Winkel des Strahls relativ zur Karte
+            float beam_theta = p.theta + angle_offset_for_this_beam;
+
+            // Hole die erwartete Distanz von der Karte für diesen Strahl und dieses Partikel
+            float expected_distance = getExpectedDistanceFromMap(p.x, p.y, beam_theta);
+
+            // Vergleiche erwartete und tatsächliche Distanz und berechne die Wahrscheinlichkeit
+            float error = expected_distance - actual_distance;
+            // Gaußsche Verteilung zur Berechnung der Wahrscheinlichkeit
+            // sensor_noise_ steuert die Breite der Verteilung (Toleranz gegenüber Fehlern)
             float prob = std::exp(- (error * error) / (2 * sensor_noise_ * sensor_noise_));
+
+            // Multipliziere das Partikelgewicht mit der Wahrscheinlichkeit dieses Strahls
             weight *= prob;
+
+            // Optional: Wenn ein Strahl eine sehr geringe Wahrscheinlichkeit liefert,
+            // kann man die Schleife frühzeitig abbrechen, um Rechenzeit zu sparen.
+            // if (weight < some_threshold) break;
+            ROS_INFO_STREAM("Beam " << i 
+                << " | Measured: " << actual_distance 
+                << " m | Expected: " << expected_distance << " m");
         }
 
         p.weight = weight;
     }
 
-    // Normalisieren
-    double sum = 0.0;
-    for (const auto& p : particales_) sum += p.weight;
-    if (sum > 0) {
-        for (auto& p : particales_) p.weight /= sum;
+    // Normalisiere die Gewichte aller Partikel
+    double sum_of_weights;
+    for (const auto& p : particales_) 
+    {
+        sum_of_weights += p.weight;
+        //ROS_INFO_STREAM("Sum_of_weights:" << sum_of_weights);
+    }
+
+    if (sum_of_weights > 0) {
+        for (auto& p : particales_) {
+            p.weight /= sum_of_weights;
+        }
+    } else {
+        // Fallback: Wenn alle Gewichte 0 sind (z.B. bei initialer Fehlkonfiguration oder schlechtem Match),
+        // verteile die Gewichte gleichmäßig neu, um zu vermeiden, dass der Filter stirbt.
+        ROS_WARN("Sum of particle weights is zero. Resetting weights to uniform distribution.");
+        for (auto& p : particales_) {
+            p.weight = 1.0 / NUM_PARTICLES;
+        }
+        if (!particales_.empty()) 
+        {
+            ROS_INFO_STREAM("ParticalFilter::updateWeights(): First particle weight AFTER reset to uniform: " << particales_[0].weight);
+        }
     }
 }
 
@@ -198,7 +283,8 @@ bool ParticalFilter::worldToMap(float x, float y, int& map_x, int& map_y) const
             map_y >= 0 && map_y < static_cast<int>(map_.info.height));
 }
 
-float ParticalFilter::getExpectedDistanceFromMap(float x, float y, float theta) {
+float ParticalFilter::getExpectedDistanceFromMap(float x, float y, float theta) 
+{
     float step = 0.05;         // 5 cm Schritte
     float max_range = 5.0;     // maximal 5 m
     float last_valid_r = 0.0;
@@ -209,22 +295,34 @@ float ParticalFilter::getExpectedDistanceFromMap(float x, float y, float theta) 
 
         int mx, my;
         if (!worldToMap(scan_x, scan_y, mx, my)) {
-            ROS_INFO_STREAM("Ray exited map at r=" << r << " → returning " << last_valid_r);
+            //ROS_INFO_STREAM("Ray exited map at r=" << r << " → returning " << last_valid_r);
             return last_valid_r; // außerhalb Karte → vorheriger Wert
         }
 
         int index = my * map_.info.width + mx;
         if (map_.data[index] > 50) {
-            ROS_INFO_STREAM("Hit obstacle at (" << scan_x << ", " << scan_y << "), r=" << r);
+            //ROS_INFO_STREAM("Hit obstacle at (" << scan_x << ", " << scan_y << "), r=" << r);
             return r;
         }
 
         last_valid_r = r;
     }
 
-    ROS_INFO_STREAM("No obstacle hit, returning max_range=" << max_range);
+    //ROS_INFO_STREAM("No obstacle hit, returning max_range=" << max_range);
+    //return std::numeric_limits<float>::infinity();
     return max_range;
 }
 
+void ParticalFilter::setMap(const nav_msgs::OccupancyGrid& map) 
+{
+    map_ = map;
+
+    ROS_INFO_STREAM("Map loaded:");
+    ROS_INFO_STREAM("  Width: " << map_.info.width);
+    ROS_INFO_STREAM("  Height: " << map_.info.height);
+    ROS_INFO_STREAM("  Resolution: " << map_.info.resolution);
+    ROS_INFO_STREAM("  Origin: (" << map_.info.origin.position.x << ", "
+                                  << map_.info.origin.position.y << ")");
+}
 
 

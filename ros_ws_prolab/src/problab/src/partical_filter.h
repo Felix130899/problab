@@ -16,7 +16,7 @@ struct Particle
     double weight;
 };
 
-const int NUM_PARTICLES = 100;
+const int NUM_PARTICLES = 1;
 
 
 
@@ -34,11 +34,13 @@ public:
     void publishParticles();
     bool worldToMap(float x, float y, int& map_x, int& map_y) const;
     float getExpectedDistanceFromMap(float x, float y, float theta);
+    void setMap(const nav_msgs::OccupancyGrid& map);
 
 private:
     double motion_noise_trans_;
     double motion_noise_rot_;
     double sensor_noise_;
+
 
 
     std::vector<Particle> particales_;

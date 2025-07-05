@@ -35,14 +35,23 @@ public:
 
         scan_sub_ = nh.subscribe("/scan", 1, &FilterNode::scanCallback, this);
 
+
+        map_sub_ = nh.subscribe("/map", 1, &FilterNode::mapCallback, this);
+
+
+
     }
 
 private:
+    
+    ros::Subscriber map_sub_;
+    bool map_received_ = false;
+    
     void sensorCallback(const nav_msgs::Odometry::ConstPtr &odom_msg, const sensor_msgs::Imu::ConstPtr &imu_msg)
     {
-        ROS_INFO_STREAM("Received sensor data");
+        //ROS_INFO_STREAM("Received sensor data");
         //pf_.publishParticles();
-        std::cout << "----------------------------------------------------------------";
+        // std::cout << "----------------------------------------------------------------";
         SensorData data = convert_sensor_data(odom_msg, imu_msg);
         ros::Time current_time = data.timestamp;
         
@@ -53,6 +62,7 @@ private:
         
         double v = data.control(0); 
         double omega = data.control(1);
+
         pf_.motionUpdate(v, omega, dt);
         if (latest_scan_) 
         {
@@ -72,6 +82,25 @@ private:
     {
         latest_scan_ = msg;
     }
+
+    void mapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg) 
+    {
+    if (!map_received_) 
+        {
+        pf_.setMap(*msg);
+        map_received_ = true;
+        ROS_INFO("Static map received and set.");
+
+        ROS_INFO_STREAM("Map dimensions: " << msg->info.width << " x " << msg->info.height);
+        ROS_INFO_STREAM("Map resolution: " << msg->info.resolution << " m/cell");
+        ROS_INFO_STREAM("Map origin: (" << msg->info.origin.position.x << ", "
+                                        << msg->info.origin.position.y << ")");
+        ROS_INFO_STREAM("Map data size: " << msg->data.size());
+
+        map_sub_.shutdown(); // nur einmal empfangen
+        }
+    }
+
 
 
     message_filters::Subscriber<nav_msgs::Odometry> odom_sub_;
