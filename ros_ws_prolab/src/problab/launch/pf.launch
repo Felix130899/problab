@@ -2,6 +2,7 @@
   <arg name="world_name" default="$(find problab)/worlds/playground.world" />
   <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(arg world_name)"/>
+    <arg name="gui" value="false"/>
   </include>
 
   <arg name="robot_model" default="burger" />

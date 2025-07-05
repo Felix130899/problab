@@ -11,8 +11,8 @@
 
 ParticalFilter::ParticalFilter()
     : gen_(std::random_device()()), // Initialize random generator in constructor
-      motion_noise_trans_(0.05),    // Initialize member variables
-      motion_noise_rot_(0.02),
+      motion_noise_trans_(0.5),    // Initialize member variables
+      motion_noise_rot_(0.2),
       sensor_noise_(0.5),
       noise_trans_(0.0, motion_noise_trans_), // Initialize distributions
       noise_rot_(0.0, motion_noise_rot_)
@@ -33,6 +33,9 @@ ParticalFilter::ParticalFilter(ros::NodeHandle& nh)
     ROS_INFO("Particle Marker publisher created on topic: %s", particles_marker_pub_.getTopic().c_str());
 
     // All initializations done in the initializer list
+    estimated_path_pub_ = nh.advertise<nav_msgs::Path>("estimated_path", 10);
+    estimated_path_.header.frame_id = "map";
+
 }
 
 
@@ -100,12 +103,12 @@ void ParticalFilter::motionUpdate(double v, double omega, double dt)
 void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
 {
     // Bestimme, wie viele Strahlen du nutzen möchtest
-    int num_beams_to_use = 10; // Beispiel: Nutze 10 Strahlen
+    int num_beams_to_use = 360; // Beispiel: Nutze 10 Strahlen
 
     // Berechne den Schritt, um die Strahlen gleichmäßig zu verteilen
     // Wenn num_beams_to_use = 1, wird nur der mittlere Strahl verwendet.
     // Wenn num_beams_to_use > scan.ranges.size(), verwenden wir alle Strahlen.
-    int step_size = 1;
+    int step_size = 10;
     if (num_beams_to_use > 0 && scan.ranges.size() > num_beams_to_use) 
     {
         step_size = scan.ranges.size() / num_beams_to_use;
@@ -188,7 +191,7 @@ void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
             //     << " | Measured: " << actual_distance 
             //     << " m | Expected: " << expected_distance << " m");
         }
-        log_weight = std::max(log_weight, -50.0f);  // clamp to avoid exp(-1000)
+        log_weight = std::max(log_weight, -20.0f);  // clamp to avoid exp(-1000)
         p.weight = std::exp(log_weight);
 
     }
@@ -198,7 +201,7 @@ void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
     for (const auto& p : particales_) 
     {
         sum_of_weights += p.weight;
-        ROS_INFO_STREAM("Sum_of_weights:" << sum_of_weights);
+        //ROS_INFO_STREAM("Sum_of_weights:" << sum_of_weights);
     }
 
     if (sum_of_weights > 0) {
@@ -221,15 +224,108 @@ void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
 
 
 
-// void ParticalFilter::resample()
-// {
+void ParticalFilter::resample()
+{
+    std::vector<Particle> new_particles;
+    new_particles.reserve(particales_.size());
 
-// }
+    // Cumulative sum der Gewichte berechnen
+    std::vector<double> cumulative_weights(particales_.size());
+    cumulative_weights[0] = particales_[0].weight;
+    for (size_t i = 1; i < particales_.size(); ++i) {
+        cumulative_weights[i] = cumulative_weights[i - 1] + particales_[i].weight;
+    }
 
-// void ParticalFilter::estimatePose()
-// {
+    // Systematisches Sampling
+    std::uniform_real_distribution<> dist(0.0, 1.0 / particales_.size());
+    double r = dist(gen_);
+    double step = 1.0 / particales_.size();
+    double c = cumulative_weights[0];
+    size_t i = 0;
 
-// }
+    for (size_t m = 0; m < particales_.size(); ++m) {
+        double u = r + m * step;
+        while (u > c && i < cumulative_weights.size() - 1) {
+            ++i;
+            c = cumulative_weights[i];
+        }
+        new_particles.push_back(particales_[i]);
+    }
+    std::normal_distribution<> jitter_x(0.0, 0.04);
+    std::normal_distribution<> jitter_y(0.0, 0.04);
+    std::normal_distribution<> jitter_theta(0.0, 0.005);
+
+    for (auto& p : new_particles) 
+    {
+        p.x += jitter_x(gen_);
+        p.y += jitter_y(gen_);
+        p.theta += jitter_theta(gen_);
+    }
+    particales_ = new_particles;
+}
+
+
+void ParticalFilter::estimatePose()
+{
+    if (particales_.empty())
+        return;
+
+    // Berechne gewichteten Mittelwert der Partikelpositionen
+    double sum_weights = 0.0;
+    double avg_x = 0.0, avg_y = 0.0, avg_theta_x = 0.0, avg_theta_y = 0.0;
+
+    for (const auto& p : particales_) {
+        avg_x += p.weight * p.x;
+        avg_y += p.weight * p.y;
+        avg_theta_x += p.weight * std::cos(p.theta);
+        avg_theta_y += p.weight * std::sin(p.theta);
+        sum_weights += p.weight;
+    }
+
+    if (sum_weights == 0.0)
+        return;
+
+    avg_x /= sum_weights;
+    avg_y /= sum_weights;
+    double avg_theta = std::atan2(avg_theta_y, avg_theta_x);
+
+    geometry_msgs::PoseStamped pose;
+    pose.header.stamp = ros::Time::now();
+    pose.header.frame_id = "map";
+    pose.pose.position.x = avg_x;
+    pose.pose.position.y = avg_y;
+    pose.pose.position.z = 0.0;
+
+    tf2::Quaternion q;
+    q.setRPY(0, 0, avg_theta);
+    pose.pose.orientation = tf2::toMsg(q);
+
+    // ---------------- GLÄTTUNG ----------------
+    double alpha = 0.05; // je kleiner, desto stärker die Glättung
+
+    if (has_smoothed_pose_) {
+        pose.pose.position.x = alpha * pose.pose.position.x + (1.0 - alpha) * last_smoothed_pose_.pose.position.x;
+        pose.pose.position.y = alpha * pose.pose.position.y + (1.0 - alpha) * last_smoothed_pose_.pose.position.y;
+
+        tf2::Quaternion new_q, last_q;
+        tf2::fromMsg(pose.pose.orientation, new_q);
+        tf2::fromMsg(last_smoothed_pose_.pose.orientation, last_q);
+        new_q = last_q.slerp(new_q, alpha);
+        pose.pose.orientation = tf2::toMsg(new_q);
+    }
+
+    last_smoothed_pose_ = pose;
+    has_smoothed_pose_ = true;
+    // ------------------------------------------
+
+    estimated_path_.poses.push_back(pose);
+    estimated_path_.header.stamp = pose.header.stamp;
+    estimated_path_pub_.publish(estimated_path_);
+}
+
+
+
+
 
 void ParticalFilter::publishParticles()
 {
@@ -293,8 +389,8 @@ bool ParticalFilter::worldToMap(float x, float y, int& map_x, int& map_y) const
 
 float ParticalFilter::getExpectedDistanceFromMap(float x, float y, float theta) 
 {
-    float step = 0.05;         // 5 cm Schritte
-    float max_range = 5.0;     // maximal 5 m
+    float step = 0.05;        
+    float max_range = 100.0;     
     float last_valid_r = 0.0;
 
     for (float r = 0.0; r < max_range; r += step) {
@@ -333,4 +429,8 @@ void ParticalFilter::setMap(const nav_msgs::OccupancyGrid& map)
                                   << map_.info.origin.position.y << ")");
 }
 
-
+double ParticalFilter::randomNoise(double stddev) {
+    static std::default_random_engine generator(std::random_device{}());
+    std::normal_distribution<double> dist(0.0, stddev);
+    return dist(generator);
+}

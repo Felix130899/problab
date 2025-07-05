@@ -9,6 +9,9 @@
 #include "partical_filter.h"
 #include "convert_sensor_data.h"
 #include <sensor_msgs/LaserScan.h>
+#include <nav_msgs/Path.h>
+#include <gazebo_msgs/ModelStates.h>
+#include <geometry_msgs/PoseStamped.h>
 
 class FilterNode
 {
@@ -38,6 +41,15 @@ public:
 
         map_sub_ = nh.subscribe("/map", 1, &FilterNode::mapCallback, this);
 
+        groundtruth_path_pub_ = nh.advertise<nav_msgs::Path>("/odom_path", 10);
+        groundtruth_path_.header.frame_id = "map";
+
+        model_states_sub_ = nh.subscribe("/gazebo/model_states", 10, &FilterNode::modelStatesCallback, this);
+        model_states_path_pub_ = nh.advertise<nav_msgs::Path>("/model_state_path", 10);
+        model_states_path_.header.frame_id = "map";
+
+        estimated_path_pub_ = nh.advertise<nav_msgs::Path>("/estimated_path", 10);
+        estimated_path_.header.frame_id = "map";
 
 
     }
@@ -46,6 +58,14 @@ private:
     
     ros::Subscriber map_sub_;
     bool map_received_ = false;
+
+    ros::Subscriber model_states_sub_; // For /gazebo/model_states
+    nav_msgs::Path model_states_path_; // This will now store the *true* ground truth
+    ros::Publisher model_states_path_pub_;
+
+    ros::Publisher estimated_path_pub_;
+    nav_msgs::Path estimated_path_;
+
     
     void sensorCallback(const nav_msgs::Odometry::ConstPtr &odom_msg, const sensor_msgs::Imu::ConstPtr &imu_msg)
     {
@@ -69,6 +89,10 @@ private:
             pf_.updateWeights(*latest_scan_);
         }
 
+        pf_.resample();
+
+        pf_.estimatePose();
+        
       
     }
 
@@ -101,7 +125,24 @@ private:
         }
     }
 
+    void modelStatesCallback(const gazebo_msgs::ModelStates::ConstPtr& msg)
+    {
+        auto it = std::find(msg->name.begin(), msg->name.end(), "turtlebot3");
+        if (it == msg->name.end()) {
+            ROS_WARN_THROTTLE(5.0, "Robot name not found in model_states");
+            return;
+        }
 
+        size_t index = std::distance(msg->name.begin(), it);
+        geometry_msgs::PoseStamped gt_pose;
+        gt_pose.header.stamp = ros::Time::now();
+        gt_pose.header.frame_id = "map";  // oder "odom", je nach RViz-Frame
+        gt_pose.pose = msg->pose[index];
+
+        model_states_path_.poses.push_back(gt_pose);
+        model_states_path_.header.stamp = gt_pose.header.stamp;
+        model_states_path_pub_.publish(model_states_path_);
+    }
 
     message_filters::Subscriber<nav_msgs::Odometry> odom_sub_;
     message_filters::Subscriber<sensor_msgs::Imu> imu_sub_;
@@ -119,6 +160,10 @@ private:
 
     sensor_msgs::LaserScan::ConstPtr latest_scan_;
     ros::Subscriber scan_sub_;
+
+    ros::Publisher groundtruth_path_pub_;
+    nav_msgs::Path groundtruth_path_;
+
 
 
 };

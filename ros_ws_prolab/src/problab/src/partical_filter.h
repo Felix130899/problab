@@ -6,7 +6,8 @@
 #include <random>
 #include <sensor_msgs/LaserScan.h>
 #include <nav_msgs/OccupancyGrid.h>
-
+#include <cmath>   
+#include <nav_msgs/Path.h>
 
 
 
@@ -16,7 +17,10 @@ struct Particle
     double weight;
 };
 
-const int NUM_PARTICLES = 100;
+const int NUM_PARTICLES = 600;
+
+
+
 
 
 
@@ -28,13 +32,14 @@ public:
     void init();
     void motionUpdate(double v, double omega, double delta_t);
     void updateWeights(const sensor_msgs::LaserScan& scan);
-    // void resample();
-    // void estimatePose(); 
+    void resample();
+    void estimatePose();
 
     void publishParticles();
     bool worldToMap(float x, float y, int& map_x, int& map_y) const;
     float getExpectedDistanceFromMap(float x, float y, float theta);
     void setMap(const nav_msgs::OccupancyGrid& map);
+    double randomNoise(double stddev);
 
 private:
     double motion_noise_trans_;
@@ -53,6 +58,12 @@ private:
 
     nav_msgs::OccupancyGrid map_;
     std::vector<Particle> particles_;
+
+    ros::Publisher estimated_path_pub_;
+    nav_msgs::Path estimated_path_;
+
+    geometry_msgs::PoseStamped last_smoothed_pose_;
+    bool has_smoothed_pose_ = false;
 
 };
 
