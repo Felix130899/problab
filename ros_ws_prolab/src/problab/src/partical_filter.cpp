@@ -13,7 +13,7 @@ ParticalFilter::ParticalFilter()
     : gen_(std::random_device()()), // Initialize random generator in constructor
       motion_noise_trans_(0.05),    // Initialize member variables
       motion_noise_rot_(0.02),
-      sensor_noise_(1.0),
+      sensor_noise_(0.5),
       noise_trans_(0.0, motion_noise_trans_), // Initialize distributions
       noise_rot_(0.0, motion_noise_rot_)
 {
@@ -22,8 +22,8 @@ ParticalFilter::ParticalFilter()
 
 ParticalFilter::ParticalFilter(ros::NodeHandle& nh)
     : gen_(std::random_device()()), // Initialize random generator in constructor
-      motion_noise_trans_(0.05),    // Example values, consider loading from ROS parameters
-      motion_noise_rot_(0.02),
+      motion_noise_trans_(0.5),    // Example values, consider loading from ROS parameters
+      motion_noise_rot_(0.2),
       sensor_noise_(0.1),
       noise_trans_(0.0, motion_noise_trans_), // Initialize distributions
       noise_rot_(0.0, motion_noise_rot_)
@@ -141,7 +141,8 @@ void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
 
     for (auto& p : particales_) 
     {
-        float weight = 1.0;
+        float log_weight = 0.0;
+
 
         // Iteriere über eine Auswahl von Strahlen aus dem tatsächlichen LaserScan
         for (int i = 0; i < scan.ranges.size(); i += step_size) 
@@ -165,6 +166,11 @@ void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
             // Hole die erwartete Distanz von der Karte für diesen Strahl und dieses Partikel
             float expected_distance = getExpectedDistanceFromMap(p.x, p.y, beam_theta);
 
+            if (!std::isfinite(expected_distance) || !std::isfinite(actual_distance)) 
+            {
+                continue; // Strahl überspringen
+            }
+
             // Vergleiche erwartete und tatsächliche Distanz und berechne die Wahrscheinlichkeit
             float error = expected_distance - actual_distance;
             // Gaußsche Verteilung zur Berechnung der Wahrscheinlichkeit
@@ -172,25 +178,27 @@ void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
             float prob = std::exp(- (error * error) / (2 * sensor_noise_ * sensor_noise_));
 
             // Multipliziere das Partikelgewicht mit der Wahrscheinlichkeit dieses Strahls
-            weight *= prob;
+            log_weight += - (error * error) / (2 * sensor_noise_ * sensor_noise_);
+
 
             // Optional: Wenn ein Strahl eine sehr geringe Wahrscheinlichkeit liefert,
             // kann man die Schleife frühzeitig abbrechen, um Rechenzeit zu sparen.
             // if (weight < some_threshold) break;
-            ROS_INFO_STREAM("Beam " << i 
-                << " | Measured: " << actual_distance 
-                << " m | Expected: " << expected_distance << " m");
+            // ROS_INFO_STREAM("Beam " << i 
+            //     << " | Measured: " << actual_distance 
+            //     << " m | Expected: " << expected_distance << " m");
         }
+        log_weight = std::max(log_weight, -50.0f);  // clamp to avoid exp(-1000)
+        p.weight = std::exp(log_weight);
 
-        p.weight = weight;
     }
 
     // Normalisiere die Gewichte aller Partikel
-    double sum_of_weights;
+    double sum_of_weights = 0.0;
     for (const auto& p : particales_) 
     {
         sum_of_weights += p.weight;
-        //ROS_INFO_STREAM("Sum_of_weights:" << sum_of_weights);
+        ROS_INFO_STREAM("Sum_of_weights:" << sum_of_weights);
     }
 
     if (sum_of_weights > 0) {
@@ -309,8 +317,8 @@ float ParticalFilter::getExpectedDistanceFromMap(float x, float y, float theta)
     }
 
     //ROS_INFO_STREAM("No obstacle hit, returning max_range=" << max_range);
-    //return std::numeric_limits<float>::infinity();
-    return max_range;
+    return std::numeric_limits<float>::infinity();
+    //return max_range;
 }
 
 void ParticalFilter::setMap(const nav_msgs::OccupancyGrid& map) 

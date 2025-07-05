@@ -16,7 +16,7 @@ struct Particle
     double weight;
 };
 
-const int NUM_PARTICLES = 1;
+const int NUM_PARTICLES = 100;
 
 
 
