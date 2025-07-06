@@ -1,39 +1,21 @@
 // partical_filter.cpp
 #include "partical_filter.h"
-#include <random>
-#include <pcl/point_cloud.h>
-#include <pcl_conversions/pcl_conversions.h>
-#include <visualization_msgs/MarkerArray.h>
-#include <tf2/LinearMath/Quaternion.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
-
-
-ParticalFilter::ParticalFilter()
-    : gen_(std::random_device()()), // Initialize random generator in constructor
-      motion_noise_trans_(0.5),    // Initialize member variables
-      motion_noise_rot_(0.2),
-      sensor_noise_(0.5),
-      noise_trans_(0.0, motion_noise_trans_), // Initialize distributions
-      noise_rot_(0.0, motion_noise_rot_)
-{
-    // All initializations done in the initializer list
-}
 
 ParticalFilter::ParticalFilter(ros::NodeHandle& nh)
     : gen_(std::random_device()()), // Initialize random generator in constructor
-      motion_noise_trans_(0.5),    // Example values, consider loading from ROS parameters
+      motion_noise_trans_(0.5),    
       motion_noise_rot_(0.2),
       sensor_noise_(0.1),
-      noise_trans_(0.0, motion_noise_trans_), // Initialize distributions
+      noise_trans_(0.0, motion_noise_trans_), //Initialize distributions
       noise_rot_(0.0, motion_noise_rot_)
 {
-    //particles_pub_= nh.advertise<sensor_msgs::PointCloud2>("particles_topic", 1);
+
     particles_marker_pub_ = nh.advertise<visualization_msgs::MarkerArray>("particles_marker_topic", 1);
     ROS_INFO("Particle Marker publisher created on topic: %s", particles_marker_pub_.getTopic().c_str());
 
-    // All initializations done in the initializer list
-    estimated_path_pub_ = nh.advertise<nav_msgs::Path>("estimated_path", 10);
+
+    estimated_path_pub_ = nh.advertise<nav_msgs::Path>("pf_path", 10);
     estimated_path_.header.frame_id = "map";
 
 }
@@ -41,32 +23,27 @@ ParticalFilter::ParticalFilter(ros::NodeHandle& nh)
 
 void ParticalFilter::init()
 {
-
-    //Initalisiert Zufallsgenerator
-    std::random_device rd;
-    std::mt19937 gen(rd());
-
-    //Standartabweichung für die Gaußche Verteilung
+    //Standard deviation for the Gaussian distribution
     double sigma_x_intit = 0.1;
     double sigma_y_intit = 0.1;
     double sigma_theta_intit = 0.05;
 
-    //Normalverteilung um 0,0,0
+    //Normal distribution around 0,0,0
     std::normal_distribution<> d_x_init(0.0, sigma_x_intit);
     std::normal_distribution<> d_y_init(0.0, sigma_y_intit);
     std::normal_distribution<> d_theta_init(0.0, sigma_theta_intit);
 
-    //Löscht noch vorhandene Pratikel und 'particales' ist jetzt eine Membervariable der Klasse ParticalFilter
+    //Deletes particle
     particales_.clear();
     particales_.reserve(NUM_PARTICLES);
 
     for (int i = 0; i < NUM_PARTICLES; i++)
     {
         Particle p;
-        p.x = d_x_init(gen);
-        p.y = d_y_init(gen);
-        p.theta = d_theta_init(gen);
-        p.weight = 1.0 / NUM_PARTICLES; //Anfangsgewicht gleichmäßig verteilen
+        p.x = d_x_init(gen_);
+        p.y = d_y_init(gen_);
+        p.theta = d_theta_init(gen_);
+        p.weight = 1.0 / NUM_PARTICLES; //Distribute initial weight evenly
         particales_.push_back(p);
     }
 }
@@ -74,7 +51,8 @@ void ParticalFilter::init()
 
 void ParticalFilter::motionUpdate(double v, double omega, double dt)
 {
-    for (auto& p : particales_) {
+    for (auto& p : particales_) 
+    {
         float v_noisy = v + noise_trans_(gen_);
         float omega_noisy = omega + noise_rot_(gen_);
 
@@ -83,12 +61,14 @@ void ParticalFilter::motionUpdate(double v, double omega, double dt)
 
         float dx, dy;
 
-        if (std::abs(omega_noisy) > 1e-5) {
+        if (std::abs(omega_noisy) > 1e-5) 
+        {
             float R = v_noisy / omega_noisy;
             dx = R * (std::sin(theta + delta_theta) - std::sin(theta));
             dy = -R * (std::cos(theta + delta_theta) - std::cos(theta));
-        } else {
-            // Geradeausbewegung
+        } 
+        else 
+        {
             dx = v_noisy * dt * std::cos(theta);
             dy = v_noisy * dt * std::sin(theta);
         }
@@ -102,20 +82,18 @@ void ParticalFilter::motionUpdate(double v, double omega, double dt)
 
 void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
 {
-    // Bestimme, wie viele Strahlen du nutzen möchtest
-    int num_beams_to_use = 360; // Beispiel: Nutze 10 Strahlen
+    //Beams
+    int num_beams_to_use = 360;
 
-    // Berechne den Schritt, um die Strahlen gleichmäßig zu verteilen
-    // Wenn num_beams_to_use = 1, wird nur der mittlere Strahl verwendet.
-    // Wenn num_beams_to_use > scan.ranges.size(), verwenden wir alle Strahlen.
+    //How many beams are being used (so I take all 360 beams but beacause of calculation power I only use every 10. beam)
     int step_size = 10;
     if (num_beams_to_use > 0 && scan.ranges.size() > num_beams_to_use) 
     {
         step_size = scan.ranges.size() / num_beams_to_use;
     }
-    if (step_size == 0) step_size = 1; // Sicherstellen, dass step_size mindestens 1 ist
+    if (step_size == 0) step_size = 1;
 
-    //#####################################################################
+
     for (int i = 0; i < scan.ranges.size(); i += step_size) 
     {
         if (std::isinf(scan.ranges[i]) || std::isnan(scan.ranges[i])) 
@@ -126,18 +104,18 @@ void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
         float actual_distance = scan.ranges[i];
         float angle = scan.angle_min + i * scan.angle_increment;
 
+        //Debugging for Laserscaner 
         // ROS_INFO_STREAM("LaserScan: Beam " << i 
         //                 << " | angle = " << angle 
         //                 << " rad | distance = " << actual_distance << " m");
-            // Sicherstellen, dass der Scan gültige Daten enthält
         if (scan.ranges.empty()) 
         {
-            //ROS_WARN("Received empty laser scan, skipping weight update.");
+            ROS_WARN("Received empty laser scan, skipping weight update.");
             return;
         }
     }
-    //#########################################################################
-
+    
+    //Debugging
     //ROS_INFO_STREAM("ParticalFilter::updateWeights(): Processing scan with " << scan.ranges.size() << " total ranges.");
     //ROS_INFO_STREAM("  Using approximately " << (scan.ranges.size() / step_size) << " beams with step_size " << step_size << ".");
 
@@ -146,11 +124,9 @@ void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
     {
         float log_weight = 0.0;
 
-
-        // Iteriere über eine Auswahl von Strahlen aus dem tatsächlichen LaserScan
         for (int i = 0; i < scan.ranges.size(); i += step_size) 
         {
-            // Überspringe ungültige Messungen (NaN oder Inf)
+            //Not using invalid measurements
             if (std::isinf(scan.ranges[i]) || std::isnan(scan.ranges[i])) 
             {
                 continue;
@@ -158,34 +134,34 @@ void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
 
             float actual_distance = scan.ranges[i];
 
-            // Berechne den relativen Winkel für diesen spezifischen Laserstrahl
-            // scan.angle_min ist der Winkel des ersten Strahls
-            // scan.angle_increment ist der Winkelabstand zwischen den Strahlen
+            //Calculate the relative angle for this specific laser beam
+            //scan.angle_min is the angle of the first beam
+            //scan.angle_increment is the angular distance between the beams
             float angle_offset_for_this_beam = scan.angle_min + static_cast<float>(i) * scan.angle_increment;
 
-            // Berechne den absoluten Winkel des Strahls relativ zur Karte
+            //Calculate the absolute angle of the beam relative to the map
             float beam_theta = p.theta + angle_offset_for_this_beam;
 
-            // Hole die erwartete Distanz von der Karte für diesen Strahl und dieses Partikel
+            //Get the expected distance from the map for this beam and this particle
             float expected_distance = getExpectedDistanceFromMap(p.x, p.y, beam_theta);
 
             if (!std::isfinite(expected_distance) || !std::isfinite(actual_distance)) 
             {
-                continue; // Strahl überspringen
+                continue;
             }
 
-            // Vergleiche erwartete und tatsächliche Distanz und berechne die Wahrscheinlichkeit
+            //Compare expected and actual distance and compute the probability
             float error = expected_distance - actual_distance;
-            // Gaußsche Verteilung zur Berechnung der Wahrscheinlichkeit
-            // sensor_noise_ steuert die Breite der Verteilung (Toleranz gegenüber Fehlern)
+            
+            // Gaussian distribution to compute the probability
+            // sensor_noise_ controls the width of the distribution (tolerance to errors)
             float prob = std::exp(- (error * error) / (2 * sensor_noise_ * sensor_noise_));
 
-            // Multipliziere das Partikelgewicht mit der Wahrscheinlichkeit dieses Strahls
+            //Multiply the particle weight by the probability of this beam
             log_weight += - (error * error) / (2 * sensor_noise_ * sensor_noise_);
 
 
-            // Optional: Wenn ein Strahl eine sehr geringe Wahrscheinlichkeit liefert,
-            // kann man die Schleife frühzeitig abbrechen, um Rechenzeit zu sparen.
+            //Debugging
             // if (weight < some_threshold) break;
             // ROS_INFO_STREAM("Beam " << i 
             //     << " | Measured: " << actual_distance 
@@ -196,7 +172,7 @@ void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
 
     }
 
-    // Normalisiere die Gewichte aller Partikel
+    //Normalize sum of particle
     double sum_of_weights = 0.0;
     for (const auto& p : particales_) 
     {
@@ -204,15 +180,20 @@ void ParticalFilter::updateWeights(const sensor_msgs::LaserScan& scan)
         //ROS_INFO_STREAM("Sum_of_weights:" << sum_of_weights);
     }
 
-    if (sum_of_weights > 0) {
-        for (auto& p : particales_) {
+    if (sum_of_weights > 0) 
+    {
+        for (auto& p : particales_) 
+        {
             p.weight /= sum_of_weights;
         }
-    } else {
-        // Fallback: Wenn alle Gewichte 0 sind (z.B. bei initialer Fehlkonfiguration oder schlechtem Match),
-        // verteile die Gewichte gleichmäßig neu, um zu vermeiden, dass der Filter stirbt.
+    } 
+    else 
+    {
+        // Fallback: If all weights are zero (e.g., due to initial misconfiguration or poor match),
+        // redistribute the weights uniformly to prevent the filter from dying.
         ROS_WARN("Sum of particle weights is zero. Resetting weights to uniform distribution.");
-        for (auto& p : particales_) {
+        for (auto& p : particales_) 
+        {
             p.weight = 1.0 / NUM_PARTICLES;
         }
         if (!particales_.empty()) 
@@ -229,14 +210,14 @@ void ParticalFilter::resample()
     std::vector<Particle> new_particles;
     new_particles.reserve(particales_.size());
 
-    // Cumulative sum der Gewichte berechnen
+    //Compute the cumulative sum of the weights
     std::vector<double> cumulative_weights(particales_.size());
     cumulative_weights[0] = particales_[0].weight;
     for (size_t i = 1; i < particales_.size(); ++i) {
         cumulative_weights[i] = cumulative_weights[i - 1] + particales_[i].weight;
     }
 
-    // Systematisches Sampling
+    //SystematischesSystematic Sampling
     std::uniform_real_distribution<> dist(0.0, 1.0 / particales_.size());
     double r = dist(gen_);
     double step = 1.0 / particales_.size();
@@ -270,11 +251,12 @@ void ParticalFilter::estimatePose()
     if (particales_.empty())
         return;
 
-    // Berechne gewichteten Mittelwert der Partikelpositionen
+    //Compute the weighted mean of the particle positions
     double sum_weights = 0.0;
     double avg_x = 0.0, avg_y = 0.0, avg_theta_x = 0.0, avg_theta_y = 0.0;
 
-    for (const auto& p : particales_) {
+    for (const auto& p : particales_) 
+    {
         avg_x += p.weight * p.x;
         avg_y += p.weight * p.y;
         avg_theta_x += p.weight * std::cos(p.theta);
@@ -300,8 +282,9 @@ void ParticalFilter::estimatePose()
     q.setRPY(0, 0, avg_theta);
     pose.pose.orientation = tf2::toMsg(q);
 
-    // ---------------- GLÄTTUNG ----------------
-    double alpha = 0.05; // je kleiner, desto stärker die Glättung
+    // Smoothing
+    double alpha = 0.05; //the smaller it is, the stronger the smoothing
+
 
     if (has_smoothed_pose_) {
         pose.pose.position.x = alpha * pose.pose.position.x + (1.0 - alpha) * last_smoothed_pose_.pose.position.x;
@@ -316,7 +299,6 @@ void ParticalFilter::estimatePose()
 
     last_smoothed_pose_ = pose;
     has_smoothed_pose_ = true;
-    // ------------------------------------------
 
     estimated_path_.poses.push_back(pose);
     estimated_path_.header.stamp = pose.header.stamp;
@@ -333,45 +315,38 @@ void ParticalFilter::publishParticles()
 
     for (size_t i = 0; i < particales_.size(); ++i)
     {
-        const Particle& p = particales_[i]; // Achten Sie auf die korrekte Schreibweise: Particale
+        const Particle& p = particales_[i];
 
         visualization_msgs::Marker marker;
         marker.header.frame_id = "map";
         marker.header.stamp = ros::Time::now();
         marker.ns = "particles";
         marker.id = i;
-        marker.type = visualization_msgs::Marker::ARROW; // Bleibt bei ARROW
+        marker.type = visualization_msgs::Marker::ARROW;
         marker.action = visualization_msgs::Marker::ADD;
 
         // Position
         marker.pose.position.x = p.x;
         marker.pose.position.y = p.y;
-        marker.pose.position.z = 0.0; // Wichtig: Z auf 0, um sie auf der Ebene zu halten
+        marker.pose.position.z = 0.0; 
 
-        // Orientierung aus theta (Rotation nur um die Z-Achse)
         tf2::Quaternion q;
         q.setRPY(0, 0, p.theta); // Roll=0, Pitch=0, Yaw=p.theta
         marker.pose.orientation = tf2::toMsg(q);
 
-        // Größe: WICHTIGE ANPASSUNG HIER für flachere Pfeile
-        marker.scale.x = 0.2;  // Länge des Pfeils
-        marker.scale.y = 0.01; // Sehr geringe Breite für "flaches" Aussehen
-        marker.scale.z = 0.01; // Sehr geringe Höhe für "flaches" Aussehen
+        marker.scale.x = 0.2; 
+        marker.scale.y = 0.01;
+        marker.scale.z = 0.01;
 
-        // Farbe (Grün)
         marker.color.r = 0.0;
         marker.color.g = 1.0;
         marker.color.b = 0.0;
-        marker.color.a = 1.0; // Volle Deckkraft
+        marker.color.a = 1.0;
 
         marker_array.markers.push_back(marker);
     }
 
-    // Löschen alter Marker: Optional, aber oft nützlich, wenn die Anzahl der Marker variieren könnte
-    // marker.action = visualization_msgs::Marker::DELETEALL;
-    // marker_array.markers.push_back(marker); // Fügt einen DELETEALL Marker hinzu, der alle alten Marker im Namespace löscht
-
-    particles_marker_pub_.publish(marker_array); // Veröffentlichen Sie das MarkerArray
+    particles_marker_pub_.publish(marker_array);
 }
 
 bool ParticalFilter::worldToMap(float x, float y, int& map_x, int& map_y) const 
@@ -400,7 +375,7 @@ float ParticalFilter::getExpectedDistanceFromMap(float x, float y, float theta)
         int mx, my;
         if (!worldToMap(scan_x, scan_y, mx, my)) {
             //ROS_INFO_STREAM("Ray exited map at r=" << r << " → returning " << last_valid_r);
-            return last_valid_r; // außerhalb Karte → vorheriger Wert
+            return last_valid_r;
         }
 
         int index = my * map_.info.width + mx;
@@ -414,7 +389,6 @@ float ParticalFilter::getExpectedDistanceFromMap(float x, float y, float theta)
 
     //ROS_INFO_STREAM("No obstacle hit, returning max_range=" << max_range);
     return std::numeric_limits<float>::infinity();
-    //return max_range;
 }
 
 void ParticalFilter::setMap(const nav_msgs::OccupancyGrid& map) 

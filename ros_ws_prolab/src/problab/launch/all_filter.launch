@@ -41,6 +41,12 @@
 
   <node name="pf_manager" pkg="problab" type="pf_node" output="screen" />
 
+  <!-- ========= EKF NODE ========= -->
 
+  <node name="ekf_manager" pkg="problab" type="ekf_node" output="screen" /> 
+
+  <!-- ========= KF NODE ========= -->
+
+  <node name="kf_manager" pkg="problab" type="kf_node" output="screen" />  
 
 </launch>
