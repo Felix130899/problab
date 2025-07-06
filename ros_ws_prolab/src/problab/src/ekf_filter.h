@@ -3,11 +3,7 @@
 
 #include <eigen3/Eigen/Dense>
 #include <ros/ros.h>
-// Make sure kalman_filter.h includes convert_sensor_data.h
-// so it knows about the SensorData struct.
 #include "convert_sensor_data.h" 
-
-// REMOVE THE SensorData struct definition from here!
 
 class ExtendedKalmanFilter
 {
@@ -20,10 +16,10 @@ public:
     const Eigen::MatrixXd& getSigma() const;
 
 private:
-    Eigen::VectorXd mu_;     // Zustand: [x, y, theta, v, omega]
+    Eigen::VectorXd mu_;     // State: [x, y, theta, v, omega]
     Eigen::VectorXd mu_p;
-    Eigen::MatrixXd Sigma_;  // Kovarianzmatrix
-    Eigen::MatrixXd R_;      // Prozessrauschen
+    Eigen::MatrixXd Sigma_;  // Covarianz
+    Eigen::MatrixXd R_;      // Process noise
     Eigen::MatrixXd Q_;
 };
 

@@ -44,8 +44,6 @@ public:
 
 private:
 
-    geometry_msgs::PoseStamped last_gt_pose_;
-
     KalmanFilter filter_;
     ros::Time last_time_;
     message_filters::Subscriber<nav_msgs::Odometry> odom_sub_;
@@ -57,6 +55,9 @@ private:
     ros::Publisher pub_;
     ros::Publisher path_pub_;
     nav_msgs::Path path_;
+
+    //For Debugging Purpose to get real theta
+    //geometry_msgs::PoseStamped last_gt_pose_;
 
     // Method to publish the estimated pose with covariance
     void publish_prediction(const Eigen::VectorXd &mu, const Eigen::MatrixXd &Sigma, const ros::Time &stamp)
@@ -137,16 +138,17 @@ private:
         path_.header.stamp = current_time;
         path_pub_.publish(path_);
 
-    double gt_theta = tf2::getYaw(last_gt_pose_.pose.orientation);
+    //For debugging purpose real pose vs. predicted
+    // double gt_theta = tf2::getYaw(last_gt_pose_.pose.orientation);
 
-    double ex = filtered_mu(0) - last_gt_pose_.pose.position.x;
-    double ey = filtered_mu(1) - last_gt_pose_.pose.position.y;
-    double etheta = filtered_mu(2) - gt_theta;
+    // double ex = filtered_mu(0) - last_gt_pose_.pose.position.x;
+    // double ey = filtered_mu(1) - last_gt_pose_.pose.position.y;
+    // double etheta = filtered_mu(2) - gt_theta;
 
-    std::cout << "Fehler:\n";
-    std::cout << "  Δx     = " << ex << "\n";
-    std::cout << "  Δy     = " << ey << "\n";
-    std::cout << "  Δtheta = " << etheta << "\n";
+    // std::cout << "Fehler:\n";
+    // std::cout << "  Δx     = " << ex << "\n";
+    // std::cout << "  Δy     = " << ey << "\n";
+    // std::cout << "  Δtheta = " << etheta << "\n";
 
     }
 
