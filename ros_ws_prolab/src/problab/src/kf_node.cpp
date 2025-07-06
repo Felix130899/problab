@@ -50,7 +50,6 @@ private:
     message_filters::Subscriber<sensor_msgs::Imu> imu_sub_;
     std::shared_ptr<message_filters::TimeSynchronizer<nav_msgs::Odometry, sensor_msgs::Imu>> sync_;
     
-
     //For KF prediction over time and realtime
     ros::Publisher pub_;
     ros::Publisher path_pub_;
@@ -59,7 +58,7 @@ private:
     //For Debugging Purpose to get real theta
     //geometry_msgs::PoseStamped last_gt_pose_;
 
-    // Method to publish the estimated pose with covariance
+    //Method to publish the estimated pose with covariance
     void publish_prediction(const Eigen::VectorXd &mu, const Eigen::MatrixXd &Sigma, const ros::Time &stamp)
     {
         geometry_msgs::PoseWithCovarianceStamped msg;
@@ -122,7 +121,6 @@ private:
         //Publishes the prediction after the correction
         publish_prediction(filtered_mu, filtered_sigma, current_time);
 
-
         geometry_msgs::PoseStamped pose;
         pose.header.stamp = current_time;
         pose.header.frame_id = "map";
@@ -138,22 +136,22 @@ private:
         path_.header.stamp = current_time;
         path_pub_.publish(path_);
 
-    //For debugging purpose real pose vs. predicted
-    // double gt_theta = tf2::getYaw(last_gt_pose_.pose.orientation);
+        //For debugging purpose real pose vs. predicted
+        // double gt_theta = tf2::getYaw(last_gt_pose_.pose.orientation);
 
-    // double ex = filtered_mu(0) - last_gt_pose_.pose.position.x;
-    // double ey = filtered_mu(1) - last_gt_pose_.pose.position.y;
-    // double etheta = filtered_mu(2) - gt_theta;
+        // double ex = filtered_mu(0) - last_gt_pose_.pose.position.x;
+        // double ey = filtered_mu(1) - last_gt_pose_.pose.position.y;
+        // double etheta = filtered_mu(2) - gt_theta;
 
-    // std::cout << "Fehler:\n";
-    // std::cout << "  Δx     = " << ex << "\n";
-    // std::cout << "  Δy     = " << ey << "\n";
-    // std::cout << "  Δtheta = " << etheta << "\n";
+        // std::cout << "Fehler:\n";
+        // std::cout << "  Δx     = " << ex << "\n";
+        // std::cout << "  Δy     = " << ey << "\n";
+        // std::cout << "  Δtheta = " << etheta << "\n";
 
     }
 
 
-}; // End of FilterNode class
+};
 
 int main(int argc, char **argv)
 {

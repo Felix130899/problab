@@ -8,8 +8,12 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <cmath>   
 #include <nav_msgs/Path.h>
-
-
+#include <random>
+#include <pcl/point_cloud.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <visualization_msgs/MarkerArray.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 struct Particle 
 {
@@ -19,22 +23,20 @@ struct Particle
 
 const int NUM_PARTICLES = 600;
 
-
-
-
-
-
 class ParticalFilter
 {
 public:
     ParticalFilter();
     ParticalFilter(ros::NodeHandle& nh);
+
+    //Main function for particle filter
     void init();
     void motionUpdate(double v, double omega, double delta_t);
     void updateWeights(const sensor_msgs::LaserScan& scan);
     void resample();
     void estimatePose();
 
+    //Helping function
     void publishParticles();
     bool worldToMap(float x, float y, int& map_x, int& map_y) const;
     float getExpectedDistanceFromMap(float x, float y, float theta);
@@ -46,13 +48,10 @@ private:
     double motion_noise_rot_;
     double sensor_noise_;
 
-
-
     std::vector<Particle> particales_;
-    //ros::Publisher particales_pub_;
     ros::Publisher particles_marker_pub_;
 
-    std::mt19937 gen_; // Renamed to avoid conflict if 'gen' is used elsewhere
+    std::mt19937 gen_;
     std::normal_distribution<> noise_trans_;
     std::normal_distribution<> noise_rot_;
 
