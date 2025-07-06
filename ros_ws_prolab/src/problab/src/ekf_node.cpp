@@ -37,7 +37,7 @@ public:
         sync_->registerCallback(boost::bind(&FilterNode::sensorCallback, this, _1, _2));
 
         pub_ = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("/prediction", 10);
-        path_pub_ = nh.advertise<nav_msgs::Path>("/filter_path", 10);
+        path_pub_ = nh.advertise<nav_msgs::Path>("/ekf_path", 10);
         path_.header.frame_id = "map";  // or "map", depending on your setup
 
         nh.param<std::string>("output_file", output_filename_, "filter_data.txt");

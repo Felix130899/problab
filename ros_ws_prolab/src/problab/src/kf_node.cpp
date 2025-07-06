@@ -5,96 +5,84 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <message_filters/subscriber.h>
-#include <message_filters/time_synchronizer.h>
-#include "convert_sensor_data.h" // This should define SensorData
-#include "kalman_filter.h"     // This should define KalmanFilter
+#include <message_filters/time_synchronizer.h>   
 #include <tf2/utils.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
 #include <nav_msgs/Path.h>
 #include <tf2_ros/transform_broadcaster.h>
-#include <fstream> // Für Dateiausgabe
-#include <iomanip> // Für Formatierung der Dateiausgabe
-#include <vector>  // Für std::vector
-
-// Structure to store data for each time step for logging purposes
-struct FilterStateData {
-    ros::Time timestamp;
-    Eigen::Vector3d position_orientation; // x, y, theta
-    Eigen::Matrix3d covariance_xy_theta;  // The 3x3 covariance sub-matrix for x, y, theta
-};
-
+#include <fstream> 
+#include <iomanip> 
+#include <vector>
+#include "convert_sensor_data.h" 
+#include "kalman_filter.h"  
 
 class FilterNode
 {
 public:
     FilterNode(ros::NodeHandle &nh)
     {
+        //Subscribes to the Sensors of the turtlebot
         odom_sub_.subscribe(nh, "/odom", 10);
         imu_sub_.subscribe(nh, "/imu", 10);
 
         sync_.reset(new message_filters::TimeSynchronizer<nav_msgs::Odometry, sensor_msgs::Imu>(odom_sub_, imu_sub_, 10));
         sync_->registerCallback(boost::bind(&FilterNode::sensorCallback, this, _1, _2));
 
+        //Publish the KF Prediction in realtime and over time as a path
         pub_ = nh.advertise<geometry_msgs::PoseWithCovarianceStamped>("/prediction", 10);
-        path_pub_ = nh.advertise<nav_msgs::Path>("/filter_path", 10);
-        path_.header.frame_id = "odom";  // or "map", depending on your setup
+        path_pub_ = nh.advertise<nav_msgs::Path>("/kf_path", 10);
+        path_.header.frame_id = "map";
 
-        nh.param<std::string>("output_file", output_filename_, "filter_data.txt");
-
-        groundtruth_path_pub_ = nh.advertise<nav_msgs::Path>("/odom_path", 10);
-        groundtruth_path_.header.frame_id = "odom";
-
-        last_time_ = ros::Time::now(); // Initialize last_time_
+        //Initsialisiert last_time_
+        last_time_ = ros::Time::now();
     }
-
-    // Destructor to save data when the node shuts down
     ~FilterNode()
     {
-        //saveFilterDataToFile(output_filename_);
+
     }
 
 
 private:
-    KalmanFilter filter_; // KalmanFilter class is included from "kalman_filter.h"
+
+    geometry_msgs::PoseStamped last_gt_pose_;
+
+    KalmanFilter filter_;
     ros::Time last_time_;
     message_filters::Subscriber<nav_msgs::Odometry> odom_sub_;
     message_filters::Subscriber<sensor_msgs::Imu> imu_sub_;
     std::shared_ptr<message_filters::TimeSynchronizer<nav_msgs::Odometry, sensor_msgs::Imu>> sync_;
-    ros::Publisher pub_;
+    
 
+    //For KF prediction over time and realtime
+    ros::Publisher pub_;
     ros::Publisher path_pub_;
     nav_msgs::Path path_;
-    tf2_ros::TransformBroadcaster tf_broadcaster_; // <--- This was present to fix RViz visibility
-
-    std::vector<FilterStateData> filter_history_;
-    std::string output_filename_;
-
-    ros::Publisher groundtruth_path_pub_;
-    nav_msgs::Path groundtruth_path_;
 
     // Method to publish the estimated pose with covariance
     void publish_prediction(const Eigen::VectorXd &mu, const Eigen::MatrixXd &Sigma, const ros::Time &stamp)
     {
         geometry_msgs::PoseWithCovarianceStamped msg;
         msg.header.stamp = stamp;
-        msg.header.frame_id = "odom";
+        msg.header.frame_id = "map";
 
+        //Poses from the Predicition mu
         msg.pose.pose.position.x = mu(0);
         msg.pose.pose.position.y = mu(1);
-        msg.pose.pose.position.z = 0.0;
+        msg.pose.pose.position.z = 0.0; //always Zero because Bot moves only in x,y
 
+        //Convert to quaternion
         tf2::Quaternion q;
         q.setRPY(0, 0, mu(2));
         msg.pose.pose.orientation = tf2::toMsg(q);
 
-        // Initialize the entire covariance matrix with zeros
+        //Initialize the entire covariance matrix with zeros
         for (int i = 0; i < 36; ++i) {
             msg.pose.covariance[i] = 0.0;
         }
 
-        // Copy the 3x3 covariance sub-matrix for x, y, theta (indices 0, 1, 2 in our 5x5 Sigma)
-        // Mapping from our Eigen::Matrix (x, y, theta) to ROS 6x6 (x, y, z, roll, pitch, yaw)
-        // Indices in ROS 6x6 array for x, y, yaw are 0, 1, 5 respectively.
+        //Copy the 3x3 covariance sub-matrix for x, y, theta (indices 0, 1, 2 in our 5x5 Sigma)
+        //Mapping from our Eigen::Matrix (x, y, theta) to ROS 6x6 (x, y, z, roll, pitch, yaw)
+        //Indices in ROS 6x6 array for x, y, yaw are 0, 1, 5 respectively.
         msg.pose.covariance[0] = Sigma(0,0);   // x-x
         msg.pose.covariance[1] = Sigma(0,1);   // x-y
         msg.pose.covariance[5] = Sigma(0,2);   // x-theta (yaw)
@@ -112,39 +100,31 @@ private:
 
     void sensorCallback(const nav_msgs::Odometry::ConstPtr &odom_msg, const sensor_msgs::Imu::ConstPtr &imu_msg)
     {
+        //Calls Function to convert the sensor data for easy access
         SensorData data = convert_sensor_data(odom_msg, imu_msg);
         ros::Time current_time = data.timestamp;
 
+        //Calculats dt 
         double dt = (last_time_.isZero()) ? 0.05 : (current_time - last_time_).toSec();
         last_time_ = current_time;
         
+        //Calls the predict function for KF, with data from the convert function and dt
         filter_.predict(data, dt);
 
-        Eigen::VectorXd z(2);
-        z << odom_msg->twist.twist.linear.x,
-            imu_msg->angular_velocity.z;
+        //Calls the correct function for KF, with data from teh convert function
+        filter_.correct(data);
 
-
-        // *** HIER WAR DIE KORREKTUR VORHER NUR MIT 'z' ***
-        filter_.correct(z);
-
-        // Get the filtered state and covariance after correction
+        //Get the filtered state and covariance after correction
         const Eigen::VectorXd& filtered_mu = filter_.getMu();
         const Eigen::MatrixXd& filtered_sigma = filter_.getSigma();
 
-        // Store data for history/logging
-        FilterStateData current_data;
-        current_data.timestamp = current_time;
-        current_data.position_orientation << filtered_mu(0), filtered_mu(1), filtered_mu(2);
-        current_data.covariance_xy_theta = filtered_sigma.block<3,3>(0,0); 
-        filter_history_.push_back(current_data);
-
+        //Publishes the prediction after the correction
         publish_prediction(filtered_mu, filtered_sigma, current_time);
 
 
         geometry_msgs::PoseStamped pose;
         pose.header.stamp = current_time;
-        pose.header.frame_id = "odom";
+        pose.header.frame_id = "map";
         pose.pose.position.x = filtered_mu(0);
         pose.pose.position.y = filtered_mu(1);
         pose.pose.position.z = 0.0;
@@ -157,14 +137,17 @@ private:
         path_.header.stamp = current_time;
         path_pub_.publish(path_);
 
-        // Publish "Ground Truth" path from odometry for comparison
-        geometry_msgs::PoseStamped gt_pose;
-        gt_pose.header.stamp = current_time;
-        gt_pose.header.frame_id = "odom";
-        gt_pose.pose = odom_msg->pose.pose;
-        groundtruth_path_.poses.push_back(gt_pose);
-        groundtruth_path_.header.stamp = current_time;
-        groundtruth_path_pub_.publish(groundtruth_path_);
+    double gt_theta = tf2::getYaw(last_gt_pose_.pose.orientation);
+
+    double ex = filtered_mu(0) - last_gt_pose_.pose.position.x;
+    double ey = filtered_mu(1) - last_gt_pose_.pose.position.y;
+    double etheta = filtered_mu(2) - gt_theta;
+
+    std::cout << "Fehler:\n";
+    std::cout << "  Δx     = " << ex << "\n";
+    std::cout << "  Δy     = " << ey << "\n";
+    std::cout << "  Δtheta = " << etheta << "\n";
+
     }
 
 

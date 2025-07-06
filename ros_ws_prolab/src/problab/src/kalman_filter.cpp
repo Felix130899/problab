@@ -1,65 +1,76 @@
 // kalman_filter.cpp
-#include "kalman_filter.h" // Stelle sicher, dass diese Zeile ganz oben ist
+#include "kalman_filter.h"
 
 KalmanFilter::KalmanFilter()
 {
-    mu_ = Eigen::VectorXd::Zero(5);
-    Sigma_ = Eigen::MatrixXd::Identity(5, 5) * 0.1;
-    R_ = Eigen::MatrixXd::Identity(5, 5) * 0.001; // Initialisiere R
+    //Initialize the previous state, cavariance and process noise
+    mu_ = Eigen::VectorXd::Zero(6);
+    Sigma_ = Eigen::MatrixXd::Identity(6, 6) * 0.1;
+    R_ = Eigen::MatrixXd::Identity(6, 6) * 0.001;
 }
 
 void KalmanFilter::predict(const SensorData &data, double dt)
 {
-    // Deine aktuelle (lineare) Prädiktionslogik für mu_ und Sigma_
-    // Diese sollte so bleiben, wie du sie für dein Verständnisprojekt beabsichtigt hast.
-    // Wenn du eine A-Matrix hast, die z.B. 
-    // A(0, 3) = dt; A(1, 4) = dt; A(2, 4) = dt;
-    // beinhaltet, dann bleibt diese bestehen.
-    // Bedenke, dass diese lineare Approximation die Form der Kovarianz
-    // aufgrund von Rotationen nicht korrekt beeinflusst.
+    //State matrix A with x,y,theta,v_x,v_y,w
+    Eigen::MatrixXd A = Eigen::MatrixXd::Identity(6, 6);
+    A(0, 3) = dt; // x * dt
+    A(1, 4) = dt; // y * dt
+    A(2, 5) = dt; // theta * dt
 
-    // Beispiel für die lineare Prädiktion (wie in deinem originalen, auskommentierten Code):
-    Eigen::MatrixXd A = Eigen::MatrixXd::Identity(5, 5);
-    A(0, 3) = dt; // x += v * dt
-    A(1, 4) = dt; // y += omega * dt (wenn y von omega abhängt, sonst von v)
-    A(2, 4) = dt; // theta += omega * dt
-
-    Eigen::MatrixXd B = Eigen::MatrixXd::Zero(5, 2);
+    //Controll transformation matrix
+    Eigen::MatrixXd B = Eigen::MatrixXd::Zero(6, 2);
     B(3, 0) = 1.0; // v_new = v_old + v_cmd
     B(4, 1) = 1.0; // omega_new = omega_old + omega_cmd
 
+    //Calculating the next step mu_ and the covarianze
     mu_ = A * mu_ + B * data.control;
-    Sigma_ = A * Sigma_ * A.transpose() + R_; // Hier kommt R_ (Prozessrauschen) ins Spiel
+    Sigma_ = A * Sigma_ * A.transpose() + R_; //  R_ process noise
 }
 
 
-void KalmanFilter::correct(const Eigen::VectorXd &z)
+void KalmanFilter::correct(const SensorData &data)
 {
-    // Beobachtungsmatrix H
-    Eigen::MatrixXd H = Eigen::MatrixXd::Zero(2, 5);
-    H(0, 3) = 1.0; // v (linear velocity)
-    H(1, 4) = 1.0; // ω (angular velocity)
+    //Sensor input z, from odom sensor v and w
+    Eigen::VectorXd z(2);
+    z(0) = data.odom_linear_velocity;
+    z(1) = data.odom_angular_velocity_z;  
+    
+    //Measurement matrix C
+    Eigen::MatrixXd C = Eigen::MatrixXd::Zero(2, 6);
+    C(0, 3) = 1.0; //odom_v
+    C(1, 4) = 1.0; //odom_w
 
+    //Measurement noise Q, calibrated by the user (not dynamic)
+    Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(2, 2);
+    Q(0,0) = 0.005;  // imu_w verrauschter
+    Q(1,1) = 0.01;   // odom_w → glatter
 
+    //Kalman-gain
+    Eigen::MatrixXd S = C * Sigma_ * C.transpose() + Q;
+    Eigen::MatrixXd K = Sigma_ * C.transpose() * S.inverse();
 
-    // Hier wird Q als feste Matrix verwendet, nicht dynamisch von der Odometrie
-    Eigen::MatrixXd Q = Eigen::MatrixXd::Identity(2, 2) * 0.005; // Beispiel für einen festen Q-Wert
+    //Preview calculation 
+    Eigen::VectorXd y = z - C * mu_;
 
-    // Innovation
-    Eigen::VectorXd y = z - H * mu_;
-
-    // Kalman-Gain
-    Eigen::MatrixXd S = H * Sigma_ * H.transpose() + Q;
-    Eigen::MatrixXd K = Sigma_ * H.transpose() * S.inverse();
-
-    // Zustand aktualisieren
+    //Correction calculation
     mu_ = mu_ + K * y;
-    Sigma_ = (Eigen::MatrixXd::Identity(5, 5) - K * H) * Sigma_;
+    Sigma_ = (Eigen::MatrixXd::Identity(6, 6) - K * C) * Sigma_;
 
-    // Optional: Normiere den Orientierungswinkel theta auf [-pi, pi]
+    // Normalizing theta[-pi, pi]
     mu_(2) = std::fmod(mu_(2) + M_PI, 2 * M_PI);
     if (mu_(2) < 0) mu_(2) += 2 * M_PI;
     mu_(2) -= M_PI;
+
+    //For debugging purposes
+    // std::cout << std::fixed << std::setprecision(4);
+    // std::cout << "[KalmanFilter] Aktueller Zustand (mu):\n";
+    // std::cout << "  x      = " << mu_(0) << "\n";
+    // std::cout << "  y      = " << mu_(1) << "\n";
+    // std::cout << "  theta  = " << mu_(2) << " rad\n";
+    // std::cout << "  v_x    = " << mu_(3) << " m/s\n";
+    // std::cout << "  v_y    = " << mu_(4) << " m/s\n";
+    // std::cout << "  omega  = " << mu_(5) << " rad/s\n";
+
 }
 
 const Eigen::VectorXd& KalmanFilter::getMu() const { return mu_; }

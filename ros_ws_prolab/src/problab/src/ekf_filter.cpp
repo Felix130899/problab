@@ -177,30 +177,30 @@ void ExtendedKalmanFilter::correct(const SensorData &data)
     if (mu_(2) < 0) mu_(2) += 2 * M_PI;
     mu_(2) -= M_PI;
 
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "---------Kalmangain---------" << std::endl;
-    std::cout << K << std::endl;
-    std::cout << "############################" << std::endl;
+    // std::cout << std::fixed << std::setprecision(6);
+    // std::cout << "---------Kalmangain---------" << std::endl;
+    // std::cout << K << std::endl;
+    // std::cout << "############################" << std::endl;
 
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "---------Z---------" << std::endl;
-    std::cout << z << std::endl;
-    std::cout << "############################" << std::endl;
+    // std::cout << std::fixed << std::setprecision(6);
+    // std::cout << "---------Z---------" << std::endl;
+    // std::cout << z << std::endl;
+    // std::cout << "############################" << std::endl;
 
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "---------h()---------" << std::endl;
-    std::cout << h_predicted << std::endl;
-    std::cout << "############################" << std::endl;
+    // std::cout << std::fixed << std::setprecision(6);
+    // std::cout << "---------h()---------" << std::endl;
+    // std::cout << h_predicted << std::endl;
+    // std::cout << "############################" << std::endl;
 
-    std::cout << std::fixed << std::setprecision(6);
-    std::cout << "---------mu_ x---------" << std::endl;
-    std::cout << mu_(0) << std::endl;
-    std::cout << "############################" << std::endl;
+    // std::cout << std::fixed << std::setprecision(6);
+    // std::cout << "---------mu_ x---------" << std::endl;
+    // std::cout << mu_(0) << std::endl;
+    // std::cout << "############################" << std::endl;
 
-        std::cout << std::fixed << std::setprecision(6);
-    std::cout << "---------mu_ y---------" << std::endl;
-    std::cout << mu_(1) << std::endl;
-    std::cout << "############################" << std::endl;
+    //     std::cout << std::fixed << std::setprecision(6);
+    // std::cout << "---------mu_ y---------" << std::endl;
+    // std::cout << mu_(1) << std::endl;
+    // std::cout << "############################" << std::endl;
     
 }
 
