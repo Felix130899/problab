@@ -264,5 +264,3 @@ add_executable(pf_node
 add_dependencies(pf_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(pf_node ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 
-
-
